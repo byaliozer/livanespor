@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Phone, Mail, MapPin, Instagram, Twitter, Youtube, Facebook } from "lucide-react";
+import { Phone, Mail, MapPin, Instagram } from "lucide-react";
 
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_401d88f4-8dae-48a8-9716-45cb5be0ec5c/artifacts/4x1k75zi_Livanespor_SARI_SIYAH_NEW%20genelde%20bu.png";
 
@@ -17,11 +17,17 @@ export const Footer = () => {
                             Bursa Nilüfer'in resmi futbol kulübü. A takımdan akademiye, gelişim, disiplin ve takım ruhuyla yol alıyoruz.
                         </p>
                         <div className="flex gap-3 mt-6">
-                            {[Instagram, Twitter, Youtube, Facebook].map((Icon, i) => (
-                                <a key={i} href="#" className="w-10 h-10 flex items-center justify-center border border-white/15 hover:border-liv-yellow hover:text-liv-yellow transition-colors" data-testid={`footer-social-${i}`}>
-                                    <Icon className="w-4 h-4" />
-                                </a>
-                            ))}
+                            <a
+                                href="https://www.instagram.com/livanesporkulubu/"
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                aria-label="Livanespor Instagram"
+                                className="inline-flex items-center gap-2 px-4 h-10 border border-white/15 hover:border-liv-yellow hover:text-liv-yellow transition-colors"
+                                data-testid="footer-social-instagram"
+                            >
+                                <Instagram className="w-4 h-4" />
+                                <span className="text-xs font-semibold uppercase tracking-widest">Instagram</span>
+                            </a>
                         </div>
                     </div>
 
