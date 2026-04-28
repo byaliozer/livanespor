@@ -212,3 +212,12 @@ body::-webkit-scrollbar-thumb:hover { background: var(--liv-yellow); }
 [data-debug-wrapper="true"] {
     display: contents !important;
 }
+
+/* Hide Emergent platform badge */
+#emergent-badge,
+a[href*="emergent.sh"][href*="utm_source=emergent-badge"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
