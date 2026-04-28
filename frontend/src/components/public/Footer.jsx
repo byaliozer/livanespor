@@ -76,7 +76,10 @@ export const Footer = () => {
 
             <div className="border-t border-white/10">
                 <div className="container-x py-5 flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-neutral-500">
-                    <div>© {new Date().getFullYear()} Livanespor. Tüm hakları saklıdır.</div>
+                    <div className="text-center md:text-left">
+                        <div>© {new Date().getFullYear()} Livanespor. Tüm hakları saklıdır.</div>
+                        <div className="mt-1 text-neutral-600">Bu web sitesi <a href="https://www.dijitalroket.com" target="_blank" rel="noreferrer" className="text-liv-yellow hover:underline">Dijital Roket</a> tarafından BASKF kurallarına uygun geliştirilmiştir.</div>
+                    </div>
                     <div className="flex gap-4">
                         <a href="#" className="hover:text-liv-yellow">Gizlilik</a>
                         <a href="#" className="hover:text-liv-yellow">KVKK</a>

@@ -38,7 +38,9 @@ const AdminLogin = () => {
                 <div className="absolute top-0 right-0 font-display text-[28vw] leading-none text-black/5 select-none">LV</div>
                 <div className="relative z-10">
                     <img src={LOGO_URL} alt="Livanespor" className="w-20 h-20" />
-                    <div className="font-display text-[12vw] leading-[0.85] uppercase mt-6">LİVANES<br/>PORr</div>
+                    <div className="font-display text-[10vw] xl:text-[9vw] leading-[0.85] uppercase mt-6">
+                        Livane<br/>Spor
+                    </div>
                     <div className="mt-4 text-sm font-bold uppercase tracking-[0.3em]">Admin Panel · 2026</div>
                 </div>
             </div>
@@ -60,9 +62,6 @@ const AdminLogin = () => {
                     <button disabled={loading} type="submit" className="btn-primary w-full mt-6 inline-flex items-center justify-center gap-2 disabled:opacity-60" data-testid="admin-login-submit">
                         <LogIn className="w-4 h-4" /> {loading ? "Giriş yapılıyor..." : "Giriş Yap"}
                     </button>
-                    <div className="mt-6 text-xs text-neutral-500 border-t border-liv-border pt-4">
-                        Demo: <span className="text-liv-yellow">admin@livanespor.org</span> / <span className="text-liv-yellow">Livanespor2026!</span>
-                    </div>
                 </form>
             </div>
         </div>
