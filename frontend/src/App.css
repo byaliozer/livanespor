@@ -1,34 +1,19 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
-}
+/* App-specific styles */
+.App { min-height: 100vh; }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
-}
+/* Smooth scrolling */
+html { scroll-behavior: smooth; }
 
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
-}
+/* Image rendering */
+img { display: block; }
 
-.App-link {
-    color: #61dafb;
-}
-
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
-}
+/* Force rich text content styling */
+.prose-livanespor h2 { font-family: 'Bebas Neue', sans-serif; font-size: 2rem; color: #fff; margin-top: 2rem; margin-bottom: 1rem; letter-spacing: 0.04em; text-transform: uppercase; }
+.prose-livanespor h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem; color: #fff; margin-top: 1.5rem; margin-bottom: 0.75rem; }
+.prose-livanespor p { color: #d4d4d8; line-height: 1.8; margin-bottom: 1rem; }
+.prose-livanespor a { color: #f5dc4c; text-decoration: underline; }
+.prose-livanespor img { margin: 1.5rem 0; border-radius: 6px; }
+.prose-livanespor strong { color: #fff; }
+.prose-livanespor blockquote { border-left: 3px solid #f5dc4c; padding-left: 1rem; margin: 1.5rem 0; color: #fff; font-style: italic; }
+.prose-livanespor ul, .prose-livanespor ol { padding-left: 1.5rem; color: #d4d4d8; margin-bottom: 1rem; }
+.prose-livanespor li { margin-bottom: 0.5rem; }
