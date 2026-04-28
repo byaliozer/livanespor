@@ -1,6 +1,6 @@
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { Menu, X, Phone } from "lucide-react";
+import { Menu, X } from "lucide-react";
 
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_401d88f4-8dae-48a8-9716-45cb5be0ec5c/artifacts/4x1k75zi_Livanespor_SARI_SIYAH_NEW%20genelde%20bu.png";
 
@@ -52,7 +52,7 @@ export const Header = () => {
                             end={item.to === "/"}
                             data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
                             className={({ isActive }) =>
-                                `px-3 py-2 text-sm font-semibold uppercase tracking-wider transition-colors ${
+                                `px-3 py-2 text-sm font-semibold uppercase tracking-wider whitespace-nowrap transition-colors ${
                                     isActive ? "text-liv-yellow" : "text-white/80 hover:text-liv-yellow"
                                 }`
                             }
@@ -63,11 +63,7 @@ export const Header = () => {
                 </nav>
 
                 <div className="hidden lg:flex items-center gap-3">
-                    <a href="tel:05437934101" className="flex items-center gap-2 text-sm text-white/70 hover:text-liv-yellow" data-testid="header-phone">
-                        <Phone className="w-4 h-4" />
-                        0543 793 4101
-                    </a>
-                    <Link to="/akademi/basvuru" className="btn-primary !py-2.5 !px-5 !text-xs" data-testid="header-cta-apply">
+                    <Link to="/akademi/basvuru" className="btn-primary !py-2.5 !px-5 !text-xs whitespace-nowrap" data-testid="header-cta-apply">
                         Akademi Başvurusu
                     </Link>
                 </div>
