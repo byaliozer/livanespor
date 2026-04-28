@@ -1,0 +1,149 @@
+{
+  "theme": "dark",
+  "archetype": "Archetype 2 (The Performance Pro) + Archetype 4 (Swiss & High-Contrast)",
+  "brand_identity": {
+    "name": "Livanespor",
+    "location": "Bursa Nilüfer",
+    "primary_color": "#f5dc4c",
+    "secondary_color": "#000000",
+    "logo_url": "https://customer-assets.emergentagent.com/job_401d88f4-8dae-48a8-9716-45cb5be0ec5c/artifacts/4x1k75zi_Livanespor_SARI_SIYAH_NEW%20genelde%20bu.png",
+    "vibe": "Elite European football club, Borussia Dortmund / AC Milan tier. Athletic, commanding, minimal."
+  },
+  "colors": {
+    "primary": "#f5dc4c",
+    "primary_hover": "#e3c93b",
+    "background_base": "#0a0a0a",
+    "background_surface": "#121212",
+    "background_card": "#1a1a1a",
+    "background_elevated": "#222222",
+    "text_primary": "#ffffff",
+    "text_secondary": "#a3a3a3",
+    "border_color": "#2a2a2a",
+    "accent_white": "#ffffff",
+    "accent_gray": "#f3f4f6",
+    "academy_background": "#f8f9fa",
+    "academy_text": "#0a0a0a"
+  },
+  "typography": {
+    "fonts": {
+      "headings": "Bebas Neue",
+      "body": "Manrope",
+      "mono": "JetBrains Mono"
+    },
+    "scales": {
+      "h1": "text-5xl sm:text-6xl lg:text-8xl tracking-normal uppercase",
+      "h2": "text-4xl sm:text-5xl lg:text-6xl tracking-wide uppercase",
+      "h3": "text-2xl sm:text-3xl lg:text-4xl tracking-wide uppercase",
+      "h4": "text-xl sm:text-2xl font-bold tracking-tight",
+      "body": "text-base leading-relaxed text-gray-300",
+      "body_small": "text-sm text-gray-400",
+      "overline": "text-xs font-bold tracking-[0.2em] uppercase text-[#f5dc4c]"
+    }
+  },
+  "layout_spacing": {
+    "philosophy": "Generous spacing. High contrast. Bento Grids for metrics and sponsors.",
+    "section_padding": "py-20 md:py-32",
+    "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+    "grids": {
+      "bento_marketing": "grid-cols-1 md:grid-cols-8 lg:grid-cols-12 gap-6 md:gap-8",
+      "dashboard": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4"
+    },
+    "cards": {
+      "marketing": "bg-[#121212] border border-[#2a2a2a] p-6 lg:p-8 rounded-none md:rounded-xl shadow-2xl",
+      "sponsors": "bg-[#0a0a0a] border border-[#2a2a2a] hover:border-[#f5dc4c] transition-colors p-8 flex items-center justify-center rounded-lg"
+    }
+  },
+  "motion": {
+    "hero_entrance": "Fade in and slide up (y: 30) over 0.8s, staggered children.",
+    "scroll_reveal": "framer-motion whileInView={ opacity: 1, y: 0 }, initial={ opacity: 0, y: 20 }, viewport={ once: true }.",
+    "hover_cards": "scale(1.02) translation with subtle shadow-glow (shadow-[0_0_15px_rgba(245,220,76,0.1)]).",
+    "count_up": "Use react-countup for Hızlı Metrikler.",
+    "page_transitions": "Controlled and simple fade.",
+    "buttons": "Micro-interactions: scale(0.95) on tap, slight translation on hover."
+  },
+  "components": {
+    "navigation": "Crystal Glass effect (backdrop-blur-xl bg-black/60) sticky top-0 z-50 with 1px bottom border border-white/10. Logo prominent, primary CTA in #f5dc4c.",
+    "buttons": {
+      "primary": "bg-[#f5dc4c] text-black font-bold uppercase tracking-widest px-8 py-4 rounded-none md:rounded-sm hover:bg-[#e3c93b] transition-all",
+      "secondary": "bg-transparent border border-[#f5dc4c] text-[#f5dc4c] font-bold uppercase tracking-widest px-8 py-4 rounded-none hover:bg-[#f5dc4c] hover:text-black transition-all"
+    },
+    "slider": "Hero slider using Swiper or Embla. Full screen (100vh) with dark gradient overlay (bg-gradient-to-t from-black via-black/50 to-transparent) so text is highly legible. Progress bar indicators.",
+    "cards": "Cardless or sharp rectangular cards with 1px border. Avoid heavy rounded corners (max rounded-lg).",
+    "admin_dashboard": "Shadcn based. Sidebar navigation. Dense tables. Use neutral surfaces (#121212) with white text. High contrast metrics.",
+    "academy_section": "Visually distinct but shares DNA. Use #f5dc4c as dominant background with black text, or white background with black text and yellow accents, to cleanly separate from the dark-themed A-Team section."
+  },
+  "media": {
+    "images": [
+      {
+        "category": "hero_match_1",
+        "url": "https://images.pexels.com/photos/12616082/pexels-photo-12616082.jpeg",
+        "description": "Primary hero: Soccer player in yellow jersey kicking ball at night."
+      },
+      {
+        "category": "hero_match_2",
+        "url": "https://images.unsplash.com/photo-1762013315117-1c8005ad2b41",
+        "description": "Secondary hero slider: Packed stadium night match."
+      },
+      {
+        "category": "hero_match_3",
+        "url": "https://images.unsplash.com/photo-1773850561705-dacec6d0b16b",
+        "description": "Third hero slider: Soccer game in progress."
+      },
+      {
+        "category": "academy_training_1",
+        "url": "https://images.pexels.com/photos/26283685/pexels-photo-26283685.jpeg",
+        "description": "Academy kids training daytime."
+      },
+      {
+        "category": "academy_training_2",
+        "url": "https://images.pexels.com/photos/19932627/pexels-photo-19932627.jpeg",
+        "description": "Young player practicing outdoors."
+      },
+      {
+        "category": "player_portrait_1",
+        "url": "https://images.unsplash.com/photo-1514932535303-f7b1712cf831",
+        "description": "Player avatar portrait dark."
+      },
+      {
+        "category": "player_portrait_2",
+        "url": "https://images.unsplash.com/photo-1570095354203-130e525ae0e1",
+        "description": "Player avatar portrait 2."
+      }
+    ],
+    "icons": {
+      "library": "lucide-react",
+      "instructions": "Use Lucide icons for UI interactions. For Sponsors, use large lucide brand icons or simple vector shapes instead of text placeholders to maintain premium Bento grid look."
+    }
+  },
+  "sections_checklist": [
+    "Hero Slider (Full bleed, heavy typography)",
+    "Next Match Countdown & Last Match Score (Bento Grid layout)",
+    "Fast Metrics (react-countup, massive numbers in Bebas Neue)",
+    "Standings Table & Mini Fixture",
+    "Featured Players & Squad Showcase (Position filters, dark portrait cards)",
+    "Player Detail Page",
+    "Technical Team",
+    "Match Center",
+    "News/Blog System (Editorial style)",
+    "Sponsor Showcase (Premium Bento grid cards with hover glow)",
+    "Academy Landing Page (Age groups, Schedule, Application Form - distinct but unified design)",
+    "Contact + Map",
+    "Footer (Massive LIVANESPOR typography)",
+    "Admin Login & Dashboard (Shadcn CRUD, clean UI, AI Image Gen Panel)"
+  ],
+  "accessibility": {
+    "contrast": "Ensure white/yellow text on black meets WCAG AA.",
+    "focus": "Use focus:ring-2 focus:ring-[#f5dc4c] on all interactive elements.",
+    "testing": "All interactive and key informational elements MUST include data-testid attribute (e.g., data-testid='hero-cta-button', data-testid='squad-filter-fw')."
+  },
+  "instructions_to_main_agent": [
+    "Strictly adhere to the dark theme with #f5dc4c (Yellow) accents. Do NOT use purple, blue, or other generic AI colors.",
+    "Use pure HTML/Tailwind for the Marketing and Club sections for maximum layout freedom (Bento grids, overlapping).",
+    "Use Shadcn UI components for complex interactivity (Dropdowns, Tabs) and exclusively for the Admin Dashboard.",
+    "Apply `data-testid` to all clickable elements and major layout sections.",
+    "For the Academy section, visually separate it from the Club section either by using a predominantly White/Gray background, or keeping it dark but with distinct layout patterns.",
+    "Ensure the Hero images have a gradient overlay to make the massive Bebas Neue text readable.",
+    "Load Bebas Neue and Manrope via Google Fonts in index.html.",
+    "Do NOT use placeholder text for Sponsors. Use Lucide brand icons (like Twitch, Trello, Apple) scaled up to look like genuine premium sponsors in the grid."
+  ]
+}
