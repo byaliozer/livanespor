@@ -29,7 +29,7 @@ const Contact = () => {
                     <div className="lg:col-span-5 space-y-4">
                         <div className="bg-liv-card border border-liv-border p-6"><MapPin className="w-6 h-6 text-liv-yellow" /><div className="overline mt-3">Adres</div><div className="font-display text-2xl mt-1">Yolçatı Tesisi</div><div className="text-neutral-300">Nilüfer / Bursa</div><a href="https://maps.app.goo.gl/NKoYnqsX9hdp5k2T8" target="_blank" rel="noreferrer" className="mt-3 inline-block text-liv-yellow text-sm font-bold hover:underline" data-testid="contact-map-link">Haritada Aç →</a></div>
                         <div className="bg-liv-card border border-liv-border p-6"><Phone className="w-6 h-6 text-liv-yellow" /><div className="overline mt-3">Telefon</div><a href="tel:05437934101" className="font-display text-2xl mt-1 block hover:text-liv-yellow">0543 793 4101</a></div>
-                        <div className="bg-liv-card border border-liv-border p-6"><Mail className="w-6 h-6 text-liv-yellow" /><div className="overline mt-3">E-posta</div><a href="mailto:bilgi@livanespor.com" className="font-display text-2xl mt-1 block hover:text-liv-yellow">bilgi@livanespor.com</a></div>
+                        <div className="bg-liv-card border border-liv-border p-6"><Mail className="w-6 h-6 text-liv-yellow" /><div className="overline mt-3">E-posta</div><a href="mailto:bilgi@livanespor.org" className="font-display text-2xl mt-1 block hover:text-liv-yellow">bilgi@livanespor.org</a></div>
                     </div>
                     <form onSubmit={submit} className="lg:col-span-7 bg-liv-card border border-liv-border p-8" data-testid="contact-form">
                         <h2 className="font-display text-3xl uppercase mb-6">Mesaj Gönder</h2>

@@ -59,7 +59,7 @@ export const Footer = () => {
                         <ul className="space-y-3 text-sm text-neutral-300">
                             <li className="flex items-start gap-2"><MapPin className="w-4 h-4 text-liv-yellow mt-0.5 shrink-0" /> Yolçatı, Nilüfer / Bursa</li>
                             <li className="flex items-center gap-2"><Phone className="w-4 h-4 text-liv-yellow shrink-0" /><a href="tel:05437934101" className="hover:text-liv-yellow">0543 793 4101</a></li>
-                            <li className="flex items-center gap-2"><Mail className="w-4 h-4 text-liv-yellow shrink-0" /><a href="mailto:bilgi@livanespor.com" className="hover:text-liv-yellow">bilgi@livanespor.com</a></li>
+                            <li className="flex items-center gap-2"><Mail className="w-4 h-4 text-liv-yellow shrink-0" /><a href="mailto:bilgi@livanespor.org" className="hover:text-liv-yellow">bilgi@livanespor.org</a></li>
                         </ul>
                     </div>
                 </div>

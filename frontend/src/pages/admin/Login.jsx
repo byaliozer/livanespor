@@ -61,7 +61,7 @@ const AdminLogin = () => {
                         <LogIn className="w-4 h-4" /> {loading ? "Giriş yapılıyor..." : "Giriş Yap"}
                     </button>
                     <div className="mt-6 text-xs text-neutral-500 border-t border-liv-border pt-4">
-                        Demo: <span className="text-liv-yellow">admin@livanespor.com</span> / <span className="text-liv-yellow">Livanespor2026!</span>
+                        Demo: <span className="text-liv-yellow">admin@livanespor.org</span> / <span className="text-liv-yellow">Livanespor2026!</span>
                     </div>
                 </form>
             </div>

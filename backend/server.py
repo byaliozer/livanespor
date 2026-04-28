@@ -561,7 +561,7 @@ async def seed_content():
         'logo_url': 'https://customer-assets.emergentagent.com/job_401d88f4-8dae-48a8-9716-45cb5be0ec5c/artifacts/4x1k75zi_Livanespor_SARI_SIYAH_NEW%20genelde%20bu.png',
         'favicon_url': 'https://customer-assets.emergentagent.com/job_401d88f4-8dae-48a8-9716-45cb5be0ec5c/artifacts/4x1k75zi_Livanespor_SARI_SIYAH_NEW%20genelde%20bu.png',
         'phone': '0543 793 4101',
-        'email': 'bilgi@livanespor.com',
+        'email': 'bilgi@livanespor.org',
         'address': 'Yolçatı, Nilüfer / Bursa',
         'manager_name': 'Ali Özer',
         'map_url': 'https://maps.app.goo.gl/NKoYnqsX9hdp5k2T8',

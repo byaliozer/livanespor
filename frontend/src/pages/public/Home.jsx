@@ -364,7 +364,7 @@ const Home = () => {
                             <p className="mt-3 text-black/70">Kulüp Yöneticisi · Livanespor</p>
                             <div className="mt-6 space-y-3 text-sm font-semibold">
                                 <a href="tel:05437934101" className="flex items-center gap-2 hover:underline" data-testid="contact-phone-link"><Phone className="w-4 h-4" /> 0543 793 4101</a>
-                                <a href="mailto:bilgi@livanespor.com" className="flex items-center gap-2 hover:underline" data-testid="contact-email-link"><Mail className="w-4 h-4" /> bilgi@livanespor.com</a>
+                                <a href="mailto:bilgi@livanespor.org" className="flex items-center gap-2 hover:underline" data-testid="contact-email-link"><Mail className="w-4 h-4" /> bilgi@livanespor.org</a>
                                 <div className="flex items-center gap-2"><MapPin className="w-4 h-4" /> Yolçatı, Nilüfer / Bursa</div>
                             </div>
                         </div>
