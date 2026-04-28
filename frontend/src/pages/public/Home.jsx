@@ -324,12 +324,14 @@ const Home = () => {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {data.sponsors.slice(0, 8).map((s, i) => (
                         <Reveal key={s.id} delay={i * 60}>
-                            <a href={s.website || "#"} target="_blank" rel="noreferrer" className="aspect-[16/9] bg-liv-card border border-liv-border hover:border-liv-yellow flex items-center justify-center p-6 transition-all liv-card-glow" data-testid={`sponsor-${s.id}`}>
+                            <a href={(s.website ? (s.website.startsWith("http") ? s.website : `https://${s.website}`) : "#")} target="_blank" rel="noreferrer" className="aspect-[16/9] bg-liv-card border border-liv-border hover:border-liv-yellow flex flex-col items-center justify-center p-6 transition-all liv-card-glow text-center" data-testid={`sponsor-${s.id}`}>
                                 {s.logo_url ? (
-                                    <img src={s.logo_url} alt={s.name} className="max-h-full max-w-full object-contain" />
+                                    <img src={s.logo_url} alt={s.name} className="max-h-12 max-w-full object-contain" />
                                 ) : (
-                                    <span className="font-display text-2xl md:text-3xl text-center text-white group-hover:text-liv-yellow">{s.name}</span>
+                                    <span className="font-display text-2xl md:text-3xl text-white group-hover:text-liv-yellow">{s.name}</span>
                                 )}
+                                {s.logo_url && <span className="mt-2 text-xs font-display uppercase tracking-widest text-neutral-300">{s.name}</span>}
+                                {s.website && <span className="mt-1 text-[10px] text-liv-yellow uppercase tracking-widest">{s.website.replace(/^https?:\/\//, '')}</span>}
                             </a>
                         </Reveal>
                     ))}

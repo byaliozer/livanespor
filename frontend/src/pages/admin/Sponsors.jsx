@@ -12,14 +12,15 @@ const fields = [
         { value: "club", label: "Sadece Kulüp" }, { value: "academy", label: "Sadece Akademi" }, { value: "both", label: "Her İkisi" },
     ]},
     { name: "age_group", label: "Yaş Grubu (opsiyonel)", placeholder: "U15" },
-    { name: "website", label: "Web Sitesi" },
+    { name: "website", label: "Web Sitesi", placeholder: "https://www.example.com" },
+    { name: "instagram", label: "Instagram", placeholder: "https://www.instagram.com/kullanici/ veya @kullanici" },
     { name: "description", label: "Açıklama", type: "textarea", fullWidth: true },
     { name: "order", label: "Sıra", type: "number" },
     { name: "active", label: "Aktif", type: "checkbox" },
 ];
 const columns = [
     { key: "logo_url", label: "" }, { key: "name", label: "İsim" },
-    { key: "level", label: "Seviye" }, { key: "scope", label: "Alan" }, { key: "age_group", label: "Yaş" }, { key: "order", label: "Sıra" },
+    { key: "level", label: "Seviye" }, { key: "scope", label: "Alan" }, { key: "website", label: "Web" }, { key: "instagram", label: "Instagram" }, { key: "order", label: "Sıra" },
 ];
 const Sponsors = () => <CrudPage title="Sponsorlar" collection="sponsors" fields={fields} columns={columns} defaultValues={{ active: true, scope: "club", level: "main" }} />;
 export default Sponsors;
