@@ -99,7 +99,7 @@ def clean_doc(doc: Optional[dict]) -> Optional[dict]:
 
 # ─────────────────────────── Pydantic Models ───────────────────────────
 class LoginIn(BaseModel):
-    email: EmailStr
+    email: str
     password: str
 
 class UserOut(BaseModel):
@@ -110,7 +110,7 @@ class UserOut(BaseModel):
     created_at: str
 
 class UserCreate(BaseModel):
-    email: EmailStr
+    email: str
     password: str
     name: str
     role: str = "editor"
@@ -126,9 +126,10 @@ class GenericIn(BaseModel):
 # ─────────────────────────── Auth Routes ───────────────────────────
 @api_router.post("/auth/login", response_model=TokenOut)
 async def login(payload: LoginIn):
-    user = await db.users.find_one({'email': payload.email.lower()})
+    # Accept either email or username (case-insensitive)
+    user = await db.users.find_one({'email': payload.email.strip().lower()})
     if not user or not verify_password(payload.password, user.get('password_hash', '')):
-        raise HTTPException(status_code=401, detail="E-posta veya şifre hatalı")
+        raise HTTPException(status_code=401, detail="Kullanıcı adı veya şifre hatalı")
     token = create_token(user['id'], user['email'], user['role'])
     return TokenOut(
         token=token,

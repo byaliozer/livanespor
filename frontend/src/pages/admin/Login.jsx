@@ -49,15 +49,15 @@ const AdminLogin = () => {
                     <img src={LOGO_URL} alt="Livanespor" className="w-14 h-14 md:hidden mb-6" />
                     <div className="overline">Yönetim</div>
                     <h1 className="font-display text-5xl uppercase mt-2">Giriş Yap</h1>
-                    <p className="text-sm text-neutral-400 mt-2">Livanespor admin paneline erişmek için kimlik bilgilerinizi girin.</p>
+                    <p className="text-sm text-neutral-400 mt-2">Livanespor admin paneline erişmek için kullanıcı adı ve şifrenizi girin.</p>
                     {err && <div className="mt-4 p-3 border border-red-700 bg-red-950/40 text-red-300 text-sm flex items-center gap-2"><AlertCircle className="w-4 h-4" /> {err}</div>}
                     <div className="mt-6">
-                        <label className="liv-label">E-posta</label>
-                        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="liv-input" required data-testid="admin-login-email" />
+                        <label className="liv-label">Kullanıcı Adı</label>
+                        <input type="text" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} className="liv-input" required data-testid="admin-login-email" placeholder="Livanespor" />
                     </div>
                     <div className="mt-4">
                         <label className="liv-label">Şifre</label>
-                        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="liv-input" required data-testid="admin-login-password" />
+                        <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className="liv-input" required data-testid="admin-login-password" />
                     </div>
                     <button disabled={loading} type="submit" className="btn-primary w-full mt-6 inline-flex items-center justify-center gap-2 disabled:opacity-60" data-testid="admin-login-submit">
                         <LogIn className="w-4 h-4" /> {loading ? "Giriş yapılıyor..." : "Giriş Yap"}
