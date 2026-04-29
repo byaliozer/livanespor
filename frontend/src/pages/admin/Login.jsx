@@ -53,7 +53,7 @@ const AdminLogin = () => {
                     {err && <div className="mt-4 p-3 border border-red-700 bg-red-950/40 text-red-300 text-sm flex items-center gap-2"><AlertCircle className="w-4 h-4" /> {err}</div>}
                     <div className="mt-6">
                         <label className="liv-label">Kullanıcı Adı</label>
-                        <input type="text" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} className="liv-input" required data-testid="admin-login-email" placeholder="Livanespor" />
+                        <input type="text" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} className="liv-input" required data-testid="admin-login-email" />
                     </div>
                     <div className="mt-4">
                         <label className="liv-label">Şifre</label>
