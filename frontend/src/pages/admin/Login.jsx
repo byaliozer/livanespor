@@ -20,7 +20,7 @@ const AdminLogin = () => {
         e.preventDefault();
         setErr(""); setLoading(true);
         try {
-            await login(email, password);
+            await login(email.trim(), password);
             toast.success("Giriş başarılı");
             navigate("/admin/dashboard");
         } catch (e2) {
