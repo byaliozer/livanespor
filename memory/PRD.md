@@ -89,6 +89,14 @@ Bursa Nilüfer merkezli Livanespor için WordPress'ten bağımsız, modern, prem
 - Also fixed: missing `AdminAccount` import in `App.js` (was causing runtime crash).
 - New deps: `httpx`, `beautifulsoup4`, `lxml` added to requirements.txt.
 
+## 5c. 2026-04-29 — Auto-Sync Scheduler & Photo Upload
+- **APScheduler** entegrasyonu: `/app/backend/mackolik_scheduler.py`. AsyncIOScheduler + CronTrigger ile haftalık otomatik sync. Default: Pazar 00:00 Europe/Istanbul. Admin UI'dan: gün (Pzt-Paz), saat (00-23), dakika (00/15/30/45), aktif toggle. Settings DB'de saklanır, server restart'ta otomatik resched.
+- **Backend**: `MackolikSettingsIn` modeli `auto_sync_enabled/day/hour/minute/timezone` alanlarıyla genişletildi. `_macko_settings_doc` `next_auto_sync_at` field ekliyor (scheduler'dan canlı). PUT /admin/mackolik/settings ayar değişince `reschedule_from_db()` çağırıyor. Startup hook scheduler'ı başlatıyor.
+- **Admin UI**: `/admin/mackolik` sayfasına "Otomatik Senkronizasyon" bölümü eklendi — toggle + 3 kolonlu gün/saat/dakika seçimi + yeşil banner "Sonraki otomatik senkronizasyon" (TR timezone forced).
+- **Image upload field**: `CrudPage.jsx` içine yeni `image` field tipi eklendi → `ImageField` component drag&drop + file picker + URL fallback + base64 inline preview + delete butonu (max 5 MB).
+- **Players admin**: photo_url alanı `type: "image"` yapıldı → admin panelinden artık dosya yükleyerek oyuncu portresi eklenebilir.
+- New deps: `APScheduler==3.10.4`, `pytz`.
+
 ## 6. Backlog
 ### P1 (next iteration)
 - WYSIWYG rich text editor (TinyMCE/Lexical) for haber içerikleri

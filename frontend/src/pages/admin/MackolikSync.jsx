@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { adminApi } from "@/lib/api";
 import { toast } from "sonner";
-import { RefreshCw, ExternalLink, CheckCircle2, AlertTriangle, Save, FlaskConical, Loader2, HelpCircle, Search, Copy, Globe, ArrowRight } from "lucide-react";
+import { RefreshCw, ExternalLink, CheckCircle2, AlertTriangle, Save, FlaskConical, Loader2, HelpCircle, Search, Copy, Globe, ArrowRight, Calendar } from "lucide-react";
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger,
 } from "@/components/ui/dialog";
@@ -15,7 +15,11 @@ const Stat = ({ label, value, hint }) => (
 );
 
 const MackolikSync = () => {
-    const [settings, setSettings] = useState({ macko_team_id: "", team_display_name: "", enabled: true });
+    const [settings, setSettings] = useState({
+        macko_team_id: "", team_display_name: "", enabled: true,
+        auto_sync_enabled: false, auto_sync_day: "sun",
+        auto_sync_hour: 0, auto_sync_minute: 0,
+    });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [testing, setTesting] = useState(false);
@@ -32,10 +36,16 @@ const MackolikSync = () => {
                 macko_team_id: s.macko_team_id || "",
                 team_display_name: s.team_display_name || "",
                 enabled: s.enabled !== false,
+                auto_sync_enabled: !!s.auto_sync_enabled,
+                auto_sync_day: s.auto_sync_day || "sun",
+                auto_sync_hour: s.auto_sync_hour ?? 0,
+                auto_sync_minute: s.auto_sync_minute ?? 0,
                 last_sync_at: s.last_sync_at,
                 last_sync_status: s.last_sync_status,
                 last_sync_summary: s.last_sync_summary,
                 last_sync_error: s.last_sync_error,
+                last_sync_trigger: s.last_sync_trigger,
+                next_auto_sync_at: s.next_auto_sync_at,
             }))
             .finally(() => setLoading(false));
     };
@@ -56,6 +66,10 @@ const MackolikSync = () => {
                 macko_team_id: settings.macko_team_id.trim(),
                 team_display_name: settings.team_display_name.trim(),
                 enabled: settings.enabled,
+                auto_sync_enabled: settings.auto_sync_enabled,
+                auto_sync_day: settings.auto_sync_day,
+                auto_sync_hour: Number(settings.auto_sync_hour),
+                auto_sync_minute: Number(settings.auto_sync_minute),
             });
             toast.success("Ayarlar kaydedildi");
             loadSettings();
@@ -268,6 +282,88 @@ const MackolikSync = () => {
                     {syncing ? "Yenileniyor — Mackolik'e bağlanılıyor..." : "Mackolik'ten Verileri Yenile"}
                 </button>
                 {syncing && <p className="text-xs text-neutral-500">Bu işlem 30 saniye - 2 dakika sürebilir (kadro fotoğrafları indirilirken).</p>}
+            </section>
+
+            {/* Auto-sync schedule */}
+            <section className="bg-liv-card border border-liv-border p-6 md:p-8 space-y-5" data-testid="macko-autosync">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div>
+                        <h2 className="font-display text-xl uppercase tracking-wide flex items-center gap-2">
+                            <Calendar className="w-5 h-5 text-liv-yellow" /> Otomatik Senkronizasyon
+                        </h2>
+                        <p className="text-sm text-neutral-400 mt-1">
+                            Belirlediğiniz gün ve saatte sistem otomatik olarak Mackolik'ten yeni verileri çeker. Maçlar Cumartesi/Pazar oynanıyorsa Pazar gece 00:00 öneririz.
+                        </p>
+                    </div>
+                    <label className="inline-flex items-center gap-3 cursor-pointer bg-liv-surface border border-liv-border px-4 py-2">
+                        <input
+                            type="checkbox"
+                            checked={settings.auto_sync_enabled}
+                            onChange={(e) => update("auto_sync_enabled", e.target.checked)}
+                            className="w-4 h-4 accent-liv-yellow"
+                            data-testid="macko-autosync-toggle"
+                        />
+                        <span className="text-sm font-semibold">{settings.auto_sync_enabled ? "Aktif" : "Devre Dışı"}</span>
+                    </label>
+                </div>
+
+                <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 ${settings.auto_sync_enabled ? "" : "opacity-50 pointer-events-none"}`}>
+                    <label className="block">
+                        <span className="block text-xs uppercase tracking-wider text-neutral-400 mb-2">Gün</span>
+                        <select
+                            value={settings.auto_sync_day}
+                            onChange={(e) => update("auto_sync_day", e.target.value)}
+                            className="liv-input w-full"
+                            data-testid="macko-autosync-day"
+                        >
+                            <option value="mon">Pazartesi</option>
+                            <option value="tue">Salı</option>
+                            <option value="wed">Çarşamba</option>
+                            <option value="thu">Perşembe</option>
+                            <option value="fri">Cuma</option>
+                            <option value="sat">Cumartesi</option>
+                            <option value="sun">Pazar</option>
+                        </select>
+                    </label>
+                    <label className="block">
+                        <span className="block text-xs uppercase tracking-wider text-neutral-400 mb-2">Saat</span>
+                        <select
+                            value={settings.auto_sync_hour}
+                            onChange={(e) => update("auto_sync_hour", parseInt(e.target.value, 10))}
+                            className="liv-input w-full"
+                            data-testid="macko-autosync-hour"
+                        >
+                            {Array.from({ length: 24 }, (_, h) => (
+                                <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
+                            ))}
+                        </select>
+                    </label>
+                    <label className="block">
+                        <span className="block text-xs uppercase tracking-wider text-neutral-400 mb-2">Dakika</span>
+                        <select
+                            value={settings.auto_sync_minute}
+                            onChange={(e) => update("auto_sync_minute", parseInt(e.target.value, 10))}
+                            className="liv-input w-full"
+                            data-testid="macko-autosync-minute"
+                        >
+                            {[0, 15, 30, 45].map((m) => (
+                                <option key={m} value={m}>{String(m).padStart(2, "0")}</option>
+                            ))}
+                        </select>
+                    </label>
+                </div>
+
+                <div className="text-xs text-neutral-500">Türkiye saati (Europe/Istanbul) ile çalışır. Ayarları "Ayarları Kaydet" dediğinizde devreye girer.</div>
+
+                {settings.next_auto_sync_at && settings.auto_sync_enabled && (
+                    <div className="bg-emerald-900/20 border border-emerald-700/50 p-4 text-sm flex items-center gap-3" data-testid="macko-next-run">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span className="text-neutral-200">
+                            Sonraki otomatik senkronizasyon: <b className="text-emerald-400">{new Date(settings.next_auto_sync_at).toLocaleString("tr-TR", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Istanbul" })}</b>
+                            <span className="text-neutral-500"> (Türkiye saati)</span>
+                        </span>
+                    </div>
+                )}
             </section>
 
             {/* Last sync status */}

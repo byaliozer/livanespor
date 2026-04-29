@@ -13,7 +13,7 @@ const fields = [
     { name: "preferred_foot", label: "Ayak", type: "select", options: [
         { value: "Sağ", label: "Sağ" }, { value: "Sol", label: "Sol" }, { value: "Çift", label: "Çift" },
     ]},
-    { name: "photo_url", label: "Fotoğraf URL", fullWidth: true, placeholder: "https://..." },
+    { name: "photo_url", label: "Fotoğraf", type: "image", fullWidth: true },
     { name: "bio", label: "Biyografi", type: "textarea", fullWidth: true },
     { name: "is_captain", label: "Kaptan", type: "checkbox" },
     { name: "top_scorer", label: "Gol Kralı", type: "checkbox" },

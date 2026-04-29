@@ -1,7 +1,86 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { adminApi } from "@/lib/api";
-import { Plus, Edit2, Trash2, X, Save, Search, ImageIcon } from "lucide-react";
+import { Plus, Edit2, Trash2, X, Save, Search, ImageIcon, Upload, Trash } from "lucide-react";
 import { toast } from "sonner";
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
+
+const ImageField = ({ value, onChange, testid }) => {
+    const fileRef = useRef(null);
+    const [busy, setBusy] = useState(false);
+
+    const handleFile = (file) => {
+        if (!file) return;
+        if (!file.type.startsWith("image/")) {
+            toast.error("Sadece resim dosyası yüklenebilir");
+            return;
+        }
+        if (file.size > MAX_IMAGE_BYTES) {
+            toast.error("Dosya 5 MB'dan büyük olamaz");
+            return;
+        }
+        setBusy(true);
+        const reader = new FileReader();
+        reader.onload = () => {
+            onChange(reader.result);
+            setBusy(false);
+            toast.success("Resim hazır — kaydet'e basın");
+        };
+        reader.onerror = () => { setBusy(false); toast.error("Dosya okunamadı"); };
+        reader.readAsDataURL(file);
+    };
+
+    return (
+        <div className="space-y-3" data-testid={testid}>
+            {value ? (
+                <div className="relative inline-block">
+                    <img src={value} alt="Yüklenen" className="w-32 h-32 object-cover border border-liv-border" />
+                    <button
+                        type="button"
+                        onClick={() => onChange("")}
+                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 text-white flex items-center justify-center hover:bg-red-700"
+                        aria-label="Resmi kaldır"
+                        data-testid={`${testid}-clear`}
+                    >
+                        <Trash className="w-3 h-3" />
+                    </button>
+                </div>
+            ) : null}
+
+            <div
+                onDragOver={(e) => { e.preventDefault(); }}
+                onDrop={(e) => { e.preventDefault(); handleFile(e.dataTransfer.files?.[0]); }}
+                className="border-2 border-dashed border-liv-border bg-liv-surface px-4 py-6 text-center hover:border-liv-yellow/50 transition-colors cursor-pointer"
+                onClick={() => fileRef.current?.click()}
+                data-testid={`${testid}-dropzone`}
+            >
+                <Upload className="w-5 h-5 mx-auto text-neutral-500 mb-2" />
+                <div className="text-xs text-neutral-400">{busy ? "Yükleniyor..." : "Bilgisayardan seç veya buraya sürükle"}</div>
+                <div className="text-[10px] text-neutral-600 mt-1">PNG, JPG, WEBP · max 5 MB</div>
+                <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleFile(e.target.files?.[0])}
+                    data-testid={`${testid}-input`}
+                />
+            </div>
+
+            <div className="flex items-center gap-2">
+                <span className="text-[10px] text-neutral-500 uppercase">veya URL:</span>
+                <input
+                    type="text"
+                    value={value && !value.startsWith("data:") ? value : ""}
+                    onChange={(e) => onChange(e.target.value)}
+                    placeholder="https://..."
+                    className="liv-input flex-1 !text-xs"
+                    data-testid={`${testid}-url`}
+                />
+            </div>
+        </div>
+    );
+};
 
 /**
  * Generic CRUD admin page.
@@ -143,6 +222,8 @@ const CrudPage = ({
                                         <input type="number" value={editing[f.name] ?? ""} onChange={(e) => setEditing({ ...editing, [f.name]: e.target.value === "" ? "" : Number(e.target.value) })} className="liv-input" />
                                     ) : f.type === "json" ? (
                                         <textarea rows={4} value={typeof editing[f.name] === "string" ? editing[f.name] : JSON.stringify(editing[f.name] ?? {}, null, 2)} onChange={(e) => setEditing({ ...editing, [f.name]: e.target.value })} className="liv-input font-mono text-xs" />
+                                    ) : f.type === "image" ? (
+                                        <ImageField value={editing[f.name] ?? ""} onChange={(v) => setEditing({ ...editing, [f.name]: v })} testid={`crud-image-${f.name}`} />
                                     ) : (
                                         <input type={f.type || "text"} value={editing[f.name] ?? ""} onChange={(e) => setEditing({ ...editing, [f.name]: e.target.value })} className="liv-input" placeholder={f.placeholder} />
                                     )}

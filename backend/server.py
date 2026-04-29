@@ -491,11 +491,18 @@ async def admin_update_ai_settings(payload: AiSettingsIn, user=Depends(require_a
 
 # ─────────────────────────── Mackolik Sync ───────────────────────────
 import mackolik_sync
+import mackolik_scheduler
 
 class MackolikSettingsIn(BaseModel):
     macko_team_id: str
     team_display_name: str
     enabled: bool = True
+    auto_sync_enabled: bool = False
+    auto_sync_day: str = "sun"  # mon..sun
+    auto_sync_hour: int = 0     # 0..23
+    auto_sync_minute: int = 0   # 0..59
+    auto_sync_timezone: str = "Europe/Istanbul"
+    auto_sync_options: Optional[Dict[str, bool]] = None
 
 class MackolikSyncIn(BaseModel):
     standings: bool = True
@@ -507,12 +514,19 @@ class MackolikSyncIn(BaseModel):
 def _macko_settings_doc(d: Optional[dict]) -> dict:
     base = {
         'macko_team_id': '', 'team_display_name': '', 'enabled': True,
+        'auto_sync_enabled': False, 'auto_sync_day': 'sun',
+        'auto_sync_hour': 0, 'auto_sync_minute': 0,
+        'auto_sync_timezone': 'Europe/Istanbul',
+        'auto_sync_options': {'standings': True, 'fixtures': True, 'squad': True,
+                              'photos': True, 'force_photos': False},
         'last_sync_at': None, 'last_sync_status': None,
         'last_sync_summary': None, 'last_sync_error': None,
+        'last_sync_trigger': None,
     }
     if d:
         base.update({k: v for k, v in d.items() if k != '_id'})
     base.pop('id', None)
+    base['next_auto_sync_at'] = mackolik_scheduler.get_next_run_iso()
     return base
 
 @api_router.get("/admin/mackolik/settings")
@@ -526,6 +540,11 @@ async def admin_put_macko_settings(payload: MackolikSettingsIn, user=Depends(req
     data['id'] = 'mackolik'
     data['updated_at'] = now_iso()
     await db.site_settings.update_one({'id': 'mackolik'}, {'$set': data}, upsert=True)
+    # Reschedule auto-sync based on new settings
+    try:
+        await mackolik_scheduler.reschedule_from_db()
+    except Exception as e:
+        logger.warning(f"Mackolik reschedule failed: {e}")
     s = await db.site_settings.find_one({'id': 'mackolik'}, {'_id': 0})
     return _macko_settings_doc(s)
 
@@ -1032,6 +1051,13 @@ async def startup_event():
         await db.players.create_index('slug', unique=True, sparse=True)
     except Exception as e:
         logger.warning(f"Index creation warning: {e}")
+    # Mackolik auto-sync scheduler
+    try:
+        import mackolik_scheduler
+        mackolik_scheduler.init(db)
+        await mackolik_scheduler.reschedule_from_db()
+    except Exception as e:
+        logger.warning(f"Mackolik scheduler init warning: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
