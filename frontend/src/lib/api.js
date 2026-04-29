@@ -1,6 +1,26 @@
 import axios from "axios";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+/**
+ * Smart backend URL resolver:
+ * - If page is opened on the same origin as REACT_APP_BACKEND_URL (preview/dev), use that.
+ * - If page is opened on a DIFFERENT origin (custom domain like livanespor.org),
+ *   use the current origin so API calls hit the same domain (no SSL/CORS issues).
+ */
+const ENV_BACKEND = process.env.REACT_APP_BACKEND_URL || "";
+const CURRENT_ORIGIN = typeof window !== "undefined" ? window.location.origin : "";
+
+const BACKEND_URL = (() => {
+    if (!ENV_BACKEND) return CURRENT_ORIGIN;
+    try {
+        const envHost = new URL(ENV_BACKEND).host;
+        const curHost = new URL(CURRENT_ORIGIN).host;
+        // If running on a different host than env backend (e.g. custom domain), use current origin
+        return envHost === curHost ? ENV_BACKEND : CURRENT_ORIGIN;
+    } catch {
+        return CURRENT_ORIGIN;
+    }
+})();
+
 export const API = `${BACKEND_URL}/api`;
 
 const TOKEN_KEY = "liv_token";
