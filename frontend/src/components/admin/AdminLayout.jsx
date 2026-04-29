@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
     LayoutDashboard, Users, UserCog, Calendar, Trophy, Sparkles, Image,
     Newspaper, GraduationCap, ClipboardList, Settings, LogOut, Layers,
-    Mail, Wand2, ShieldQuestion, KeyRound
+    Mail, Wand2, ShieldQuestion, KeyRound, RefreshCw
 } from "lucide-react";
 
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_401d88f4-8dae-48a8-9716-45cb5be0ec5c/artifacts/4x1k75zi_Livanespor_SARI_SIYAH_NEW%20genelde%20bu.png";
@@ -17,6 +17,7 @@ const NAV = [
     { to: "/admin/staff", label: "Teknik Ekip", icon: UserCog, group: "Kulüp" },
     { to: "/admin/matches", label: "Maçlar", icon: Calendar, group: "Kulüp" },
     { to: "/admin/standings", label: "Puan Durumu", icon: Trophy, group: "Kulüp" },
+    { to: "/admin/mackolik", label: "Mackolik Sync", icon: RefreshCw, group: "Kulüp" },
     { to: "/admin/sponsors", label: "Sponsorlar", icon: Sparkles, group: "Kulüp" },
     { to: "/admin/academy-groups", label: "Yaş Grupları", icon: GraduationCap, group: "Akademi" },
     { to: "/admin/academy-sessions", label: "Antrenman Takvimi", icon: Calendar, group: "Akademi" },

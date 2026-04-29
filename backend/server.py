@@ -489,6 +489,108 @@ async def admin_update_ai_settings(payload: AiSettingsIn, user=Depends(require_a
     await db.ai_settings.update_one({'id': 'main'}, {'$set': data}, upsert=True)
     return {'ok': True}
 
+# ─────────────────────────── Mackolik Sync ───────────────────────────
+import mackolik_sync
+
+class MackolikSettingsIn(BaseModel):
+    macko_team_id: str
+    team_display_name: str
+    enabled: bool = True
+
+class MackolikSyncIn(BaseModel):
+    standings: bool = True
+    fixtures: bool = True
+    squad: bool = True
+    photos: bool = True
+    force_photos: bool = False
+
+def _macko_settings_doc(d: Optional[dict]) -> dict:
+    base = {
+        'macko_team_id': '', 'team_display_name': '', 'enabled': True,
+        'last_sync_at': None, 'last_sync_status': None,
+        'last_sync_summary': None, 'last_sync_error': None,
+    }
+    if d:
+        base.update({k: v for k, v in d.items() if k != '_id'})
+    base.pop('id', None)
+    return base
+
+@api_router.get("/admin/mackolik/settings")
+async def admin_get_macko_settings(user=Depends(require_admin)):
+    s = await db.site_settings.find_one({'id': 'mackolik'}, {'_id': 0})
+    return _macko_settings_doc(s)
+
+@api_router.put("/admin/mackolik/settings")
+async def admin_put_macko_settings(payload: MackolikSettingsIn, user=Depends(require_admin)):
+    data = payload.model_dump()
+    data['id'] = 'mackolik'
+    data['updated_at'] = now_iso()
+    await db.site_settings.update_one({'id': 'mackolik'}, {'$set': data}, upsert=True)
+    s = await db.site_settings.find_one({'id': 'mackolik'}, {'_id': 0})
+    return _macko_settings_doc(s)
+
+@api_router.post("/admin/mackolik/test")
+async def admin_macko_test(user=Depends(require_admin)):
+    s = await db.site_settings.find_one({'id': 'mackolik'}, {'_id': 0})
+    if not s or not s.get('macko_team_id') or not s.get('team_display_name'):
+        raise HTTPException(400, "Önce Mackolik takım ID ve takım adı girin.")
+    try:
+        payload = await mackolik_sync.fetch_all(s['macko_team_id'], s['team_display_name'])
+        return {
+            'ok': True,
+            'urls': payload['urls'],
+            'counts': {
+                'standings': len(payload['standings']),
+                'fixtures': len(payload['fixtures']),
+                'squad': len(payload['squad']),
+            },
+            'sample': {
+                'standings': payload['standings'][:3],
+                'fixtures': payload['fixtures'][:2],
+                'squad': payload['squad'][:2],
+            },
+        }
+    except Exception as e:
+        logger.exception("Mackolik test failed")
+        raise HTTPException(502, f"Mackolik bağlantısı başarısız: {e}")
+
+@api_router.post("/admin/mackolik/sync")
+async def admin_macko_sync(payload: MackolikSyncIn, user=Depends(require_admin)):
+    s = await db.site_settings.find_one({'id': 'mackolik'}, {'_id': 0})
+    if not s or not s.get('macko_team_id') or not s.get('team_display_name'):
+        raise HTTPException(400, "Önce Mackolik takım ID ve takım adı girin.")
+    if not s.get('enabled', True):
+        raise HTTPException(400, "Mackolik senkronizasyonu devre dışı.")
+    try:
+        await db.site_settings.update_one(
+            {'id': 'mackolik'},
+            {'$set': {'last_sync_status': 'running', 'last_sync_started_at': now_iso()}},
+        )
+        summary = await mackolik_sync.sync_to_db(
+            db, s['macko_team_id'], s['team_display_name'], payload.model_dump()
+        )
+        await db.site_settings.update_one(
+            {'id': 'mackolik'},
+            {'$set': {
+                'last_sync_status': 'success',
+                'last_sync_at': now_iso(),
+                'last_sync_summary': summary,
+                'last_sync_error': None,
+            }},
+        )
+        return {'ok': True, 'summary': summary}
+    except Exception as e:
+        logger.exception("Mackolik sync failed")
+        await db.site_settings.update_one(
+            {'id': 'mackolik'},
+            {'$set': {
+                'last_sync_status': 'error',
+                'last_sync_error': str(e),
+                'last_sync_at': now_iso(),
+            }},
+        )
+        raise HTTPException(500, f"Senkronizasyon hatası: {e}")
+
 class AiGenerateIn(BaseModel):
     prompt: str
     aspect_ratio: Literal["1:1", "16:9", "4:5", "9:16"] = "1:1"

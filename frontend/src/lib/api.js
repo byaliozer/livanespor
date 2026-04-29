@@ -94,4 +94,8 @@ export const adminApi = {
     saveAiSettings: (data) => api.put("/admin/ai-settings", data).then((r) => r.data),
     generateImage: (data) => api.post("/admin/ai/generate-image", data).then((r) => r.data),
     uploadMedia: (data) => api.post("/admin/media/upload", data).then((r) => r.data),
+    mackolikSettings: () => api.get("/admin/mackolik/settings").then((r) => r.data),
+    saveMackolikSettings: (data) => api.put("/admin/mackolik/settings", data).then((r) => r.data),
+    mackolikTest: () => api.post("/admin/mackolik/test").then((r) => r.data),
+    mackolikSync: (options) => api.post("/admin/mackolik/sync", options, { timeout: 180000 }).then((r) => r.data),
 };

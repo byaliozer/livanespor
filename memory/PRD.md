@@ -77,14 +77,17 @@ Bursa Nilüfer merkezli Livanespor için WordPress'ten bağımsız, modern, prem
 - Frontend: All key flows verified end-to-end
 - AI image generation: gpt-image-2 working (~23s)
 
-## 5b. 2026-04-29 — Real Mackolik Data Import
-- **Standings**: Wiped dummy 8 rows, inserted **19 real rows** (11 = Süper Amatör Lig Bursa 1.Grup, 8 = Play-Off). New `league_group` field; public `/puan-durumu` shows two separated tables; home mini-table filters to `1.Grup`. Endpoint `/api/public/standings?league_group=...` filter added.
-- **Matches**: Wiped dummy 5, inserted **27 real fixtures** (25 finished + 2 upcoming). Competition split between `Süper Amatör Lig - Bursa 1.Grup` (regular season 20 weeks) and `Süper Amatör Lig - Bursa Play-Off` (Mar–May 2026).
-- **Squad**: Updated 20 existing players (matched by Turkish-normalized name), added 14 missing players → total **34** with full Mackolik stats (matches, starts, goals, yellow/red cards). Top scorer = Burak Kocatürk (28 gol). Assists not exposed by Mackolik kadro tablosu, top_assist left empty (admin-managed).
-- **Player photos**: Mackolik CDN'inden 14/34 oyuncuya gerçek portre çekildi (`/people/{macko_id}` URL paterni, base64 data URL olarak `photo_url` alanına kaydedildi). Mackolik'in fotoğrafı olmayan 20 oyuncuda placeholder bypass'lı (boş bırakıldı, admin manuel yüklenebilir). Script: `/app/backend/import_player_photos.py` — `--force` flag mevcut foto'yu üzerine yazar.
-- **Staff**: Tarkan Civelek (Teknik Direktör) verified present.
-- **Script**: `/app/backend/import_real_data.py` — idempotent, re-runnable.
-- **Frontend**: New `Standings.jsx` (two-table layout); `Home.jsx` filters standings to `1.Grup`; `admin/Standings.jsx` exposes `league_group` column for manual edits; `App.js` import for `AdminAccount` (was missing, runtime crash).
+## 5b. 2026-04-29 — Real Mackolik Data Import & Auto-Sync System
+- **Initial seed**: imported real Bursa SAL 2025-2026 standings (19), fixtures (27), squad (34), player photos (14/34) via one-off scripts.
+- **White-label Mackolik Sync system** built end-to-end:
+  - Module: `/app/backend/mackolik_sync.py` — server-side scraper (httpx + BeautifulSoup4) parses 3 Mackolik pages (puan-durumu, maçlar, kadro). Self-contained, no JS rendering needed.
+  - Endpoints (super_admin only): `GET/PUT /api/admin/mackolik/settings`, `POST /api/admin/mackolik/test` (dry-run), `POST /api/admin/mackolik/sync` (apply with selectable scope: standings/fixtures/squad/photos/force_photos).
+  - Settings stored in `site_settings` collection with id=`mackolik`: `{macko_team_id, team_display_name, enabled, last_sync_at/status/summary/error}`.
+  - Admin UI: `/admin/mackolik` page (pages/admin/MackolikSync.jsx) — settings form, test button, granular sync options, last sync status with stats grid, help section ("Mackolik takım ID nasıl alınır").
+  - White-label: any team can configure its own Mackolik URL/team_name; Elbeyli Üzümspor or any other Bursa team can use the same site simply by changing the two settings fields.
+- Public frontend: two-table standings (1.Grup + Play-Off), home filters to 1.Grup. Admin standings exposes `league_group` column.
+- Also fixed: missing `AdminAccount` import in `App.js` (was causing runtime crash).
+- New deps: `httpx`, `beautifulsoup4`, `lxml` added to requirements.txt.
 
 ## 6. Backlog
 ### P1 (next iteration)
