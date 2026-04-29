@@ -43,6 +43,7 @@ import AdminMedia from "@/pages/admin/Media";
 import AdminAi from "@/pages/admin/AiPanel";
 import AdminSettings from "@/pages/admin/Settings";
 import AdminUsers from "@/pages/admin/Users";
+import AdminAccount from "@/pages/admin/Account";
 
 function App() {
     return (

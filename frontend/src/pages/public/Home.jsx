@@ -35,7 +35,7 @@ const Home = () => {
         // Other data — non-blocking, lower priority
         Promise.all([
             publicApi.nextMatch(), publicApi.lastMatch(),
-            publicApi.players(), publicApi.standings(),
+            publicApi.players(), publicApi.standings({ league_group: "1.Grup" }),
             publicApi.matches({ status: "upcoming" }), publicApi.matches({ status: "finished" }),
             publicApi.posts({ limit: 6 }), publicApi.sponsors(),
         ]).then(([next, last, players, standings, upcoming, finished, posts, sponsors]) => {

@@ -77,6 +77,14 @@ Bursa Nilüfer merkezli Livanespor için WordPress'ten bağımsız, modern, prem
 - Frontend: All key flows verified end-to-end
 - AI image generation: gpt-image-2 working (~23s)
 
+## 5b. 2026-04-29 — Real Mackolik Data Import
+- **Standings**: Wiped dummy 8 rows, inserted **19 real rows** (11 = Süper Amatör Lig Bursa 1.Grup, 8 = Play-Off). New `league_group` field; public `/puan-durumu` shows two separated tables; home mini-table filters to `1.Grup`. Endpoint `/api/public/standings?league_group=...` filter added.
+- **Matches**: Wiped dummy 5, inserted **27 real fixtures** (25 finished + 2 upcoming). Competition split between `Süper Amatör Lig - Bursa 1.Grup` (regular season 20 weeks) and `Süper Amatör Lig - Bursa Play-Off` (Mar–May 2026).
+- **Squad**: Updated 20 existing players (matched by Turkish-normalized name), added 14 missing players → total **34** with full Mackolik stats (matches, starts, goals, yellow/red cards). Top scorer = Burak Kocatürk (28 gol). Assists not exposed by Mackolik kadro tablosu, top_assist left empty (admin-managed).
+- **Staff**: Tarkan Civelek (Teknik Direktör) verified present.
+- **Script**: `/app/backend/import_real_data.py` — idempotent, re-runnable.
+- **Frontend**: New `Standings.jsx` (two-table layout); `Home.jsx` filters standings to `1.Grup`; `admin/Standings.jsx` exposes `league_group` column for manual edits; `App.js` import for `AdminAccount` (was missing, runtime crash).
+
 ## 6. Backlog
 ### P1 (next iteration)
 - WYSIWYG rich text editor (TinyMCE/Lexical) for haber içerikleri

@@ -367,8 +367,11 @@ async def public_last_match():
     return doc or {}
 
 @api_router.get("/public/standings")
-async def public_standings():
-    return await _list('standings', sort_field='rank', sort_dir=1)
+async def public_standings(league_group: Optional[str] = None):
+    filters = {}
+    if league_group:
+        filters['league_group'] = league_group
+    return await _list('standings', filters=filters, sort_field='rank', sort_dir=1)
 
 @api_router.get("/public/sponsors")
 async def public_sponsors(scope: Optional[str] = None, level: Optional[str] = None):

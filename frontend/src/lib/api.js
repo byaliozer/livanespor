@@ -66,7 +66,7 @@ export const publicApi = {
     matches: (params = {}) => api.get("/public/matches", { params }).then((r) => r.data),
     nextMatch: () => api.get("/public/matches/next").then((r) => r.data),
     lastMatch: () => api.get("/public/matches/last").then((r) => r.data),
-    standings: () => api.get("/public/standings").then((r) => r.data),
+    standings: (params = {}) => api.get("/public/standings", { params }).then((r) => r.data),
     sponsors: (params = {}) => api.get("/public/sponsors", { params }).then((r) => r.data),
     academyGroups: () => api.get("/public/academy/groups").then((r) => r.data),
     academySessions: () => api.get("/public/academy/sessions").then((r) => r.data),
