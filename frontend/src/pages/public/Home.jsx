@@ -15,16 +15,31 @@ const Home = () => {
         slides: [], next: null, last: null, players: [], standings: [],
         upcoming: [], finished: [], posts: [], sponsors: [],
     });
+    const [slidesLoading, setSlidesLoading] = useState(true);
     const [posFilter, setPosFilter] = useState("Tümü");
 
     useEffect(() => {
+        // Load hero slides FIRST and IMMEDIATELY (highest priority)
+        publicApi.heroSlides()
+            .then((slides) => {
+                setData((d) => ({ ...d, slides }));
+                setSlidesLoading(false);
+                // Preload first slide image as soon as we have URL
+                if (slides[0]?.image_url) {
+                    const img = new Image();
+                    img.src = slides[0].image_url;
+                }
+            })
+            .catch(() => setSlidesLoading(false));
+
+        // Other data — non-blocking, lower priority
         Promise.all([
-            publicApi.heroSlides(), publicApi.nextMatch(), publicApi.lastMatch(),
+            publicApi.nextMatch(), publicApi.lastMatch(),
             publicApi.players(), publicApi.standings(),
             publicApi.matches({ status: "upcoming" }), publicApi.matches({ status: "finished" }),
             publicApi.posts({ limit: 6 }), publicApi.sponsors(),
-        ]).then(([slides, next, last, players, standings, upcoming, finished, posts, sponsors]) => {
-            setData({ slides, next, last, players, standings, upcoming, finished, posts, sponsors });
+        ]).then(([next, last, players, standings, upcoming, finished, posts, sponsors]) => {
+            setData((d) => ({ ...d, next, last, players, standings, upcoming, finished, posts, sponsors }));
         }).catch((e) => console.error(e));
     }, []);
 
@@ -34,7 +49,7 @@ const Home = () => {
     return (
         <PublicLayout>
             <SEO title="Livanespor — Resmi Web Sitesi" description="Bursa Nilüfer'in resmi futbol kulübü Livanespor. A Takım, Akademi, Haberler, Maç Merkezi." image={data.slides[0]?.image_url} />
-            <HeroSlider slides={data.slides} />
+            <HeroSlider slides={data.slides} loading={slidesLoading} />
 
             {/* Quick metrics */}
             <section className="bg-liv-surface border-y border-liv-border" data-testid="quick-metrics">
