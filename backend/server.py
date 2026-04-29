@@ -538,16 +538,36 @@ logger = logging.getLogger(__name__)
 
 # ─────────────────────────── Seed Data ───────────────────────────
 async def seed_admin():
-    if not await db.users.find_one({'email': DEFAULT_ADMIN_EMAIL.lower()}):
+    """Ensure super_admin matches .env credentials on every startup.
+    This makes deployments idempotent: changing DEFAULT_ADMIN_PASSWORD in .env
+    and redeploying will sync the password in the live DB.
+    """
+    username = DEFAULT_ADMIN_EMAIL.lower().strip()
+    pw_hash = hash_password(DEFAULT_ADMIN_PASSWORD)
+    existing = await db.users.find_one({'role': 'super_admin'})
+    if existing:
+        # Update existing super_admin to match .env (username + password)
+        await db.users.update_one(
+            {'id': existing['id']},
+            {'$set': {
+                'email': username,
+                'name': DEFAULT_ADMIN_NAME,
+                'password_hash': pw_hash,
+            }}
+        )
+        # If email field changed, remove any stale duplicate users
+        await db.users.delete_many({'role': 'super_admin', 'id': {'$ne': existing['id']}})
+        logger.info(f"Synced super_admin from .env: username={username}")
+    else:
         await db.users.insert_one({
             'id': new_id(),
-            'email': DEFAULT_ADMIN_EMAIL.lower(),
+            'email': username,
             'name': DEFAULT_ADMIN_NAME,
             'role': 'super_admin',
-            'password_hash': hash_password(DEFAULT_ADMIN_PASSWORD),
+            'password_hash': pw_hash,
             'created_at': now_iso(),
         })
-        logger.info(f"Seeded admin user: {DEFAULT_ADMIN_EMAIL}")
+        logger.info(f"Seeded admin user: {username}")
 
 async def seed_content():
     if await db.site_settings.find_one({'id': 'main'}):
