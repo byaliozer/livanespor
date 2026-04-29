@@ -175,6 +175,34 @@ async def force_reseed():
     users = await db.users.find({'role': 'super_admin'}, {'_id': 0, 'password_hash': 0}).to_list(10)
     return {'ok': True, 'super_admins': users, 'message': 'Admin re-seeded from .env'}
 
+class ResetCredentialsIn(BaseModel):
+    new_username: str
+    new_password: str
+    confirm: str  # Must equal "LIVANESPOR-RESET-2026" to proceed
+
+@api_router.post("/auth/reset-credentials")
+async def reset_credentials(payload: ResetCredentialsIn):
+    """Emergency endpoint to reset super_admin credentials.
+    Requires a hardcoded confirm string to prevent abuse."""
+    if payload.confirm != "LIVANESPOR-RESET-2026":
+        raise HTTPException(403, "Geçersiz onay anahtarı")
+    new_username = payload.new_username.strip().lower()
+    if not new_username or len(payload.new_password) < 6:
+        raise HTTPException(400, "Kullanıcı adı boş olamaz, şifre en az 6 karakter")
+    pw_hash = hash_password(payload.new_password)
+    # Wipe all super_admins and create one fresh
+    await db.users.delete_many({'role': 'super_admin'})
+    await db.users.insert_one({
+        'id': new_id(),
+        'email': new_username,
+        'name': DEFAULT_ADMIN_NAME or 'Admin',
+        'role': 'super_admin',
+        'password_hash': pw_hash,
+        'created_at': now_iso(),
+    })
+    logger.info(f"[RESET] super_admin reset to username='{new_username}'")
+    return {'ok': True, 'username': new_username, 'message': 'Şifre güncellendi. Yeni bilgilerle giriş yapabilirsiniz.'}
+
 @api_router.get("/auth/me", response_model=UserOut)
 async def me(user=Depends(get_current_user)):
     return UserOut(**{k: user[k] for k in ('id', 'email', 'name', 'role', 'created_at')})
