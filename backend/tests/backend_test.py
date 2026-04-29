@@ -3,7 +3,7 @@ import os
 import pytest
 import requests
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://liv-pro-portal.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://academy-central-10.preview.emergentagent.com').rstrip('/')
 ADMIN_EMAIL = "admin@livanespor.com"
 ADMIN_PASSWORD = "Livanespor2026!"
 
