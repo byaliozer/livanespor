@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { adminApi } from "@/lib/api";
 import { toast } from "sonner";
-import { RefreshCw, ExternalLink, CheckCircle2, AlertTriangle, Save, FlaskConical, Loader2 } from "lucide-react";
+import { RefreshCw, ExternalLink, CheckCircle2, AlertTriangle, Save, FlaskConical, Loader2, HelpCircle, Search, Copy, Globe, ArrowRight } from "lucide-react";
+import {
+    Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger,
+} from "@/components/ui/dialog";
 
 const Stat = ({ label, value, hint }) => (
     <div className="bg-liv-card border border-liv-border p-4">
@@ -102,14 +105,17 @@ const MackolikSync = () => {
 
     return (
         <div className="p-6 md:p-8 space-y-8 max-w-5xl" data-testid="admin-mackolik-page">
-            <div>
-                <div className="flex items-center gap-3">
-                    <RefreshCw className="w-6 h-6 text-liv-yellow" />
-                    <h1 className="font-display text-3xl md:text-4xl uppercase">Mackolik Senkronizasyon</h1>
+            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                <div>
+                    <div className="flex items-center gap-3">
+                        <RefreshCw className="w-6 h-6 text-liv-yellow" />
+                        <h1 className="font-display text-3xl md:text-4xl uppercase">Mackolik Senkronizasyon</h1>
+                    </div>
+                    <p className="text-neutral-400 mt-2 text-sm md:text-base">
+                        Puan durumu, fikstür ve kadro istatistiklerini Mackolik'ten otomatik yenileyin. Tek bir tıkla, sezon süresince güncel kalın.
+                    </p>
                 </div>
-                <p className="text-neutral-400 mt-2 text-sm md:text-base">
-                    Puan durumu, fikstür ve kadro istatistiklerini Mackolik'ten otomatik yenileyin. Tek bir tıkla, sezon süresince güncel kalın.
-                </p>
+                <HowToDialog />
             </div>
 
             {/* Settings */}
@@ -297,18 +303,169 @@ const MackolikSync = () => {
                 )}
             </section>
 
-            {/* Help */}
-            <section className="bg-liv-surface border border-liv-border p-6 text-sm text-neutral-400 space-y-2">
-                <h3 className="text-neutral-200 font-semibold mb-2">Mackolik takım ID nasıl alınır?</h3>
-                <ol className="list-decimal list-inside space-y-1">
-                    <li>mackolik.com'a girip takımınızı arayın.</li>
-                    <li>Takım sayfasındaki URL'i kopyalayın. Örnek: <code className="text-liv-yellow">mackolik.com/takim/livanespor/puan-durumu/<b>macko17560237919669206821</b></code></li>
-                    <li>URL'in sonundaki <b>macko...</b> ile başlayan kısmı yukarıdaki "Mackolik Takım ID" alanına yapıştırın.</li>
-                    <li>Takım Adı'na Mackolik'teki yazılışla aynı şekilde girin (örn. "Livanespor", "Elbeyli Üzüm").</li>
-                    <li>"Bağlantı Testi" ile doğrulayın, sonra "Verileri Yenile" deyin.</li>
-                </ol>
+            {/* Help footer link */}
+            <section className="bg-liv-surface border border-liv-border p-5 text-sm text-neutral-400 flex flex-col md:flex-row md:items-center justify-between gap-3" data-testid="macko-help-footer">
+                <div className="flex items-center gap-2">
+                    <HelpCircle className="w-4 h-4 text-liv-yellow" />
+                    <span>Mackolik takım ID'sini nasıl bulacağınızı bilmiyor musunuz?</span>
+                </div>
+                <HowToDialog variant="link" />
             </section>
         </div>
+    );
+};
+
+// ─────────────────── How-To Dialog ───────────────────
+const Step = ({ n, title, children }) => (
+    <div className="flex gap-4">
+        <div className="shrink-0 w-9 h-9 rounded-full bg-liv-yellow text-black font-display text-lg flex items-center justify-center">{n}</div>
+        <div className="flex-1 pt-1">
+            <h3 className="font-semibold text-neutral-100 mb-2">{title}</h3>
+            <div className="text-sm text-neutral-400 space-y-2">{children}</div>
+        </div>
+    </div>
+);
+
+const Code = ({ children }) => (
+    <code className="px-2 py-0.5 bg-black/40 border border-liv-border text-liv-yellow font-mono text-xs break-all">{children}</code>
+);
+
+const HowToDialog = ({ variant = "button" }) => {
+    const copy = (txt) => {
+        navigator.clipboard.writeText(txt).then(() => toast.success("Kopyalandı"));
+    };
+    return (
+        <Dialog>
+            <DialogTrigger asChild>
+                {variant === "link" ? (
+                    <button className="text-liv-yellow hover:underline inline-flex items-center gap-1 text-sm font-semibold" data-testid="macko-howto-link">
+                        Adım adım rehberi aç <ArrowRight className="w-3 h-3" />
+                    </button>
+                ) : (
+                    <button className="btn-secondary inline-flex items-center gap-2 self-start" data-testid="macko-howto-btn">
+                        <HelpCircle className="w-4 h-4" />
+                        Veriler Nasıl Çekilir?
+                    </button>
+                )}
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-liv-card border-liv-border" data-testid="macko-howto-dialog">
+                <DialogHeader>
+                    <DialogTitle className="font-display text-2xl md:text-3xl uppercase tracking-wide">Mackolik'ten Veri Çekme Rehberi</DialogTitle>
+                    <DialogDescription className="text-neutral-400">
+                        Bu sistem white-label'dır — herhangi bir kulüp için çalışır. Aşağıdaki adımları takip ederek <b>kendi takımınızın</b> verilerini ekleyebilirsiniz.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-7 mt-4">
+                    <Step n={1} title="Mackolik'te takımınızı bulun">
+                        <p>
+                            Tarayıcınızda <a href="https://www.mackolik.com" target="_blank" rel="noreferrer" className="text-liv-yellow hover:underline inline-flex items-center gap-1">mackolik.com <ExternalLink className="w-3 h-3" /></a> adresine gidin.
+                        </p>
+                        <p>Sağ üstteki <Search className="inline w-3 h-3" /> arama ikonuna tıklayın ve takımınızın adını yazın <span className="text-neutral-500">(örn: "Elbeyli Üzüm", "Livanespor", "Mudanyaspor")</span>.</p>
+                        <p className="text-xs text-neutral-500">Çıkan sonuçlardan <b>takım sayfasına</b> tıklayın (oyuncu veya maç değil).</p>
+                    </Step>
+
+                    <Step n={2} title="Takım sayfasının URL'sini kontrol edin">
+                        <p>Takım sayfasındayken tarayıcınızın adres çubuğundaki URL şuna benzer:</p>
+                        <div className="bg-black/40 border border-liv-border p-3 font-mono text-xs break-all leading-relaxed">
+                            https://www.mackolik.com/takim/<span className="text-emerald-400">elbeyli-üzüm</span>/maçlar/<span className="text-liv-yellow font-bold">macko17265844851864372805</span>
+                        </div>
+                        <p>İki önemli parça var:</p>
+                        <ul className="list-disc list-inside space-y-1">
+                            <li><span className="text-emerald-400">Yeşil</span> kısım = takımın URL slug'ı (önemli değil, otomatik bulunur)</li>
+                            <li><span className="text-liv-yellow font-bold">Sarı</span> kısım = <b>Mackolik Takım ID</b> — bunu kopyalayacaksınız</li>
+                        </ul>
+                    </Step>
+
+                    <Step n={3} title="Mackolik Takım ID'yi kopyalayın">
+                        <p>URL'in <b>en sonundaki</b> "<Code>macko</Code>" ile başlayan uzun kısmı seçin ve kopyalayın. Örnekler:</p>
+                        <div className="space-y-2">
+                            {[
+                                ["Livanespor", "macko17560237919669206821"],
+                                ["Elbeyli Üzüm", "macko17265844851864372805"],
+                                ["Odunlukspor", "macko17265839385076523123"],
+                                ["Mudanyaspor", "3xq7lzv17zq3n4yjgc2dttbvu"],
+                            ].map(([name, id]) => (
+                                <div key={id} className="flex items-center justify-between gap-3 bg-liv-surface border border-liv-border px-3 py-2 text-xs">
+                                    <span className="text-neutral-300 w-32 shrink-0">{name}</span>
+                                    <Code>{id}</Code>
+                                    <button onClick={() => copy(id)} className="text-neutral-500 hover:text-liv-yellow shrink-0" aria-label={`${name} ID kopyala`}>
+                                        <Copy className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                        <p className="text-xs text-neutral-500">Not: Bazı takımların ID'si <Code>macko...</Code> olmadan harf-rakam karışımı olabilir (örn. Mudanyaspor). Sorun değil — URL'in en sonundaki kısmı her zaman doğru ID'dir.</p>
+                    </Step>
+
+                    <Step n={4} title="Bu sayfadaki form alanlarını doldurun">
+                        <div className="bg-liv-surface border border-liv-border p-4 space-y-3">
+                            <div>
+                                <div className="text-xs uppercase text-neutral-500 mb-1">Mackolik Takım ID</div>
+                                <div className="text-neutral-200">→ Az önce kopyaladığınız ID'yi buraya yapıştırın</div>
+                            </div>
+                            <div>
+                                <div className="text-xs uppercase text-neutral-500 mb-1">Takım Adı (Görünen)</div>
+                                <div className="text-neutral-200">→ Mackolik'in <b>takım sayfasında yazıldığı şekilde aynen</b> girin</div>
+                                <div className="text-xs text-neutral-500 mt-1">Doğru: <span className="text-emerald-400">"Elbeyli Üzüm"</span> · Yanlış: <span className="text-red-400">"Elbeyli Üzümspor", "elbeyli üzüm", "Elbeli Üzüm"</span></div>
+                                <div className="text-xs text-neutral-500 mt-1">Bu ad, fikstürde "ev sahibi mi deplasman mı" olduğunu anlamak için kullanılır — yanlışsa skorlar ters görünür.</div>
+                            </div>
+                        </div>
+                        <p>Sonra <span className="text-liv-yellow font-semibold">"Ayarları Kaydet"</span> butonuna basın.</p>
+                    </Step>
+
+                    <Step n={5} title='"Bağlantı Testi" ile doğrulayın (opsiyonel ama tavsiye edilir)'>
+                        <p>Bu buton <b>veritabanına hiçbir şey yazmaz</b>. Sadece Mackolik'e bağlanır ve kaç sıralama / maç / oyuncu bulduğunu gösterir.</p>
+                        <p>Beklediğiniz sayılar görünüyor mu?</p>
+                        <ul className="list-disc list-inside space-y-1 text-xs">
+                            <li>Sıralama 0 ise → Takım ID yanlış olabilir</li>
+                            <li>Maç 0 ise → Takım bu sezon hiç maç oynamamış olabilir</li>
+                            <li>Oyuncu 0 ise → Mackolik kadro sayfasında veri yok</li>
+                        </ul>
+                    </Step>
+
+                    <Step n={6} title={'"Mackolik\'ten Verileri Yenile" butonuna basın'}>
+                        <p>Aşağıdaki seçeneklerden hangilerini güncellemek istediğinizi seçip <span className="text-liv-yellow font-semibold">sarı butona</span> basın.</p>
+                        <div className="bg-amber-900/20 border border-amber-700/50 p-3 text-xs space-y-1">
+                            <div className="flex items-center gap-2 text-amber-300 font-semibold"><AlertTriangle className="w-3 h-3" /> Önemli</div>
+                            <ul className="list-disc list-inside text-neutral-300 space-y-1">
+                                <li><b>Puan Durumu</b> ve <b>Fikstür</b> tamamen silinip yeniden yazılır.</li>
+                                <li><b>Oyuncular</b> isim eşleşmesiyle güncellenir; eşleşmeyenler korunur, yeniler eklenir. <b>Hiçbir oyuncu silinmez.</b></li>
+                                <li><b>Fotoğraflar</b> Mackolik'te varsa otomatik indirilir. Manuel yüklediğiniz fotoyu üzerine yazmaz (ayrıca işaretlemediğiniz sürece).</li>
+                            </ul>
+                        </div>
+                        <p>İşlem 30 saniye - 2 dakika sürer. Bittiğinde "Son Senkronizasyon" bölümünde <span className="text-emerald-400 font-semibold">SUCCESS</span> görünecek.</p>
+                    </Step>
+
+                    <Step n={7} title="Hazırsınız! Site otomatik güncel">
+                        <p>Public siteniz (<Code>/puan-durumu</Code>, <Code>/fikstur</Code>, <Code>/oyuncular</Code>, anasayfa mini tablo) anında yeni verilerle gösterir. CDN cache yok — taraftarlar refresh attığında en güncel halini görür.</p>
+                        <p>Her hafta veya istediğiniz zaman bu sayfaya gelip <span className="text-liv-yellow font-semibold">"Verileri Yenile"</span> deyin — başka bir şey yapmanıza gerek yok.</p>
+                    </Step>
+
+                    <div className="border-t border-liv-border pt-5 mt-2">
+                        <div className="flex items-start gap-3 text-sm">
+                            <Globe className="w-5 h-5 text-liv-yellow shrink-0 mt-0.5" />
+                            <div>
+                                <div className="font-semibold text-neutral-100">White-label kullanım</div>
+                                <p className="text-neutral-400 mt-1">
+                                    Bu site mimarisi <b>kulüp bağımsızdır</b>. Aynı kodu farklı bir takıma sattığınızda (örn. Elbeyli Üzümspor), yeni admin sadece bu sayfada Takım ID + Adı'nı değiştirip <i>Verileri Yenile</i> der → 30 saniye içinde tüm site o takımın verisiyle dolar. Kod değişikliği veya backend müdahalesi gerekmez.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-liv-surface border border-liv-border p-4 text-xs space-y-2">
+                        <div className="font-semibold text-neutral-200">Sorun mu yaşıyorsunuz?</div>
+                        <ul className="list-disc list-inside text-neutral-400 space-y-1">
+                            <li><b>"Bağlantı başarısız"</b> → ID veya takım adını kontrol edin. Mackolik'in takım sayfası açılıyor mu?</li>
+                            <li><b>Fikstürde skorlar ters görünüyor</b> → Takım Adı Mackolik'tekiyle birebir aynı değil. Düzeltin ve tekrar yenileyin.</li>
+                            <li><b>Bazı oyuncuların fotosu yok</b> → Mackolik'in elinde de yok. Admin'den manuel yüklenmeli.</li>
+                            <li><b>İstatistikler hatalı</b> → Mackolik kaynağı henüz güncellenmemiş olabilir. Bir gün sonra tekrar deneyin.</li>
+                        </ul>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
     );
 };
 
