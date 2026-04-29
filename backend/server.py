@@ -226,6 +226,40 @@ async def list_users(user=Depends(require_admin)):
     rows = await db.users.find({}, {'_id': 0, 'password_hash': 0}).to_list(500)
     return [UserOut(**r) for r in rows]
 
+class ChangeCredentialsIn(BaseModel):
+    current_password: str
+    new_username: Optional[str] = None
+    new_password: Optional[str] = None
+    new_name: Optional[str] = None
+
+@api_router.post("/auth/change-credentials")
+async def change_credentials(payload: ChangeCredentialsIn, user=Depends(get_current_user)):
+    """Change own username/password/name. Requires current password."""
+    full = await db.users.find_one({'id': user['id']})
+    if not full or not verify_password(payload.current_password, full.get('password_hash', '')):
+        raise HTTPException(401, "Mevcut şifre hatalı")
+    updates = {}
+    if payload.new_username:
+        new_uname = payload.new_username.strip().lower()
+        if not new_uname:
+            raise HTTPException(400, "Kullanıcı adı boş olamaz")
+        # Check uniqueness
+        clash = await db.users.find_one({'email': new_uname, 'id': {'$ne': user['id']}})
+        if clash:
+            raise HTTPException(400, "Bu kullanıcı adı zaten kullanılıyor")
+        updates['email'] = new_uname
+    if payload.new_password:
+        if len(payload.new_password) < 6:
+            raise HTTPException(400, "Şifre en az 6 karakter olmalı")
+        updates['password_hash'] = hash_password(payload.new_password)
+    if payload.new_name:
+        updates['name'] = payload.new_name.strip()
+    if not updates:
+        raise HTTPException(400, "Değiştirilecek alan belirtilmedi")
+    await db.users.update_one({'id': user['id']}, {'$set': updates})
+    logger.info(f"[CHANGE-CRED] user {user['id']} updated: {list(updates.keys())}")
+    return {'ok': True, 'updated': list(updates.keys()), 'message': 'Bilgileriniz güncellendi. Lütfen tekrar giriş yapın.'}
+
 # ─────────────────────────── Generic CRUD factory ───────────────────────────
 COLLECTIONS = {
     'players': {'public': True, 'slug_field': 'name'},
@@ -602,36 +636,24 @@ logger = logging.getLogger(__name__)
 
 # ─────────────────────────── Seed Data ───────────────────────────
 async def seed_admin():
-    """Ensure super_admin matches .env credentials on every startup.
-    This makes deployments idempotent: changing DEFAULT_ADMIN_PASSWORD in .env
-    and redeploying will sync the password in the live DB.
+    """Seed super_admin from .env ONLY if no super_admin exists.
+    Once created, panel-managed credentials are preserved across restarts.
     """
-    username = DEFAULT_ADMIN_EMAIL.lower().strip()
-    pw_hash = hash_password(DEFAULT_ADMIN_PASSWORD)
     existing = await db.users.find_one({'role': 'super_admin'})
     if existing:
-        # Update existing super_admin to match .env (username + password)
-        await db.users.update_one(
-            {'id': existing['id']},
-            {'$set': {
-                'email': username,
-                'name': DEFAULT_ADMIN_NAME,
-                'password_hash': pw_hash,
-            }}
-        )
-        # If email field changed, remove any stale duplicate users
-        await db.users.delete_many({'role': 'super_admin', 'id': {'$ne': existing['id']}})
-        logger.info(f"Synced super_admin from .env: username={username}")
-    else:
-        await db.users.insert_one({
-            'id': new_id(),
-            'email': username,
-            'name': DEFAULT_ADMIN_NAME,
-            'role': 'super_admin',
-            'password_hash': pw_hash,
-            'created_at': now_iso(),
-        })
-        logger.info(f"Seeded admin user: {username}")
+        logger.info(f"super_admin already exists (username={existing.get('email')}); skipping seed")
+        return
+    username = DEFAULT_ADMIN_EMAIL.lower().strip()
+    pw_hash = hash_password(DEFAULT_ADMIN_PASSWORD)
+    await db.users.insert_one({
+        'id': new_id(),
+        'email': username,
+        'name': DEFAULT_ADMIN_NAME,
+        'role': 'super_admin',
+        'password_hash': pw_hash,
+        'created_at': now_iso(),
+    })
+    logger.info(f"Seeded admin user: {username}")
 
 async def seed_content():
     if await db.site_settings.find_one({'id': 'main'}):

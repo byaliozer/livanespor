@@ -88,6 +88,7 @@ function App() {
                     <Route path="/admin/ai" element={<AdminLayout><AdminAi /></AdminLayout>} />
                     <Route path="/admin/settings" element={<AdminLayout><AdminSettings /></AdminLayout>} />
                     <Route path="/admin/users" element={<AdminLayout><AdminUsers /></AdminLayout>} />
+                    <Route path="/admin/account" element={<AdminLayout><AdminAccount /></AdminLayout>} />
                 </Routes>
             </BrowserRouter>
         </AuthProvider>

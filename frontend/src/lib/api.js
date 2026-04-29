@@ -82,6 +82,7 @@ export const adminApi = {
     login: (email, password) => api.post("/auth/login", { email, password }).then((r) => r.data),
     me: () => api.get("/auth/me").then((r) => r.data),
     stats: () => api.get("/admin/dashboard/stats").then((r) => r.data),
+    changeCredentials: (data) => api.post("/auth/change-credentials", data).then((r) => r.data),
     list: (coll) => api.get(`/admin/${coll}`).then((r) => r.data),
     get: (coll, id) => api.get(`/admin/${coll}/${id}`).then((r) => r.data),
     create: (coll, data) => api.post(`/admin/${coll}`, data).then((r) => r.data),
