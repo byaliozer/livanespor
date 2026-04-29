@@ -57,7 +57,7 @@ const Home = () => {
                     {[
                         { label: "Aktif Oyuncu", value: data.players.length, suffix: "" },
                         { label: "Sezon Maçı", value: data.upcoming.length + data.finished.length, suffix: "" },
-                        { label: "Lig Sıralaması", value: (data.standings.find((s) => s.team_name === "Livanespor")?.rank) || 1, suffix: "." },
+                        { label: "Lig Sıralaması", value: (data.standings.find((s) => s.team_name === "Livanespor")?.rank) ?? 0, suffix: "." },
                         { label: "Akademi Yaş Grubu", value: 6, suffix: "" },
                     ].map((m, i) => (
                         <div key={i} className="text-center md:text-left" data-testid={`metric-${i}`}>

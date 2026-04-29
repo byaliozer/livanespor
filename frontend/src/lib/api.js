@@ -37,6 +37,12 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
     const t = getToken();
     if (t) config.headers.Authorization = `Bearer ${t}`;
+    // Bust browser cache for GET requests (admin edits must reflect instantly)
+    if ((config.method || "get").toLowerCase() === "get") {
+        config.headers["Cache-Control"] = "no-cache";
+        config.headers["Pragma"] = "no-cache";
+        config.params = { ...(config.params || {}), _t: Date.now() };
+    }
     return config;
 });
 

@@ -755,6 +755,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Prevent CDN/browser caching of API responses so admin updates are visible immediately
+@app.middleware("http")
+async def no_cache_api(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
