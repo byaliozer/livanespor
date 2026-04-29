@@ -126,10 +126,19 @@ class GenericIn(BaseModel):
 # ─────────────────────────── Auth Routes ───────────────────────────
 @api_router.post("/auth/login", response_model=TokenOut)
 async def login(payload: LoginIn):
-    # Accept either email or username (case-insensitive)
-    user = await db.users.find_one({'email': payload.email.strip().lower()})
-    if not user or not verify_password(payload.password, user.get('password_hash', '')):
-        raise HTTPException(status_code=401, detail="Kullanıcı adı veya şifre hatalı")
+    username = payload.email.strip().lower()
+    logger.info(f"[LOGIN] attempt username='{username}' from request")
+    user = await db.users.find_one({'email': username})
+    if not user:
+        # Try also without lower (in case stored differently)
+        user = await db.users.find_one({'email': payload.email.strip()})
+    if not user:
+        logger.warning(f"[LOGIN] FAIL: user '{username}' not found in DB")
+        raise HTTPException(status_code=401, detail=f"Kullanıcı bulunamadı: '{username}'. (DB'de bu kullanıcı adı kayıtlı değil)")
+    if not verify_password(payload.password, user.get('password_hash', '')):
+        logger.warning(f"[LOGIN] FAIL: password mismatch for '{username}'")
+        raise HTTPException(status_code=401, detail="Şifre hatalı (kullanıcı adı doğru, şifre yanlış)")
+    logger.info(f"[LOGIN] OK: '{username}' role={user['role']}")
     token = create_token(user['id'], user['email'], user['role'])
     return TokenOut(
         token=token,
@@ -138,6 +147,33 @@ async def login(payload: LoginIn):
             role=user['role'], created_at=user['created_at'],
         ),
     )
+
+@api_router.get("/auth/diagnose")
+async def auth_diagnose():
+    """Public diagnostic endpoint to debug login issues.
+    Returns sanitized info about admin users — NO passwords."""
+    users = await db.users.find({}, {'_id': 0, 'password_hash': 0}).to_list(50)
+    return {
+        'env_default_username': DEFAULT_ADMIN_EMAIL.lower(),
+        'env_default_name': DEFAULT_ADMIN_NAME,
+        'total_users': len(users),
+        'users': [
+            {
+                'username': u.get('email'),
+                'name': u.get('name'),
+                'role': u.get('role'),
+                'created_at': u.get('created_at'),
+            } for u in users
+        ],
+        'note': 'If env_default_username does not match any user.username, the seed function did not run or did not sync. Restart backend to trigger seed_admin().',
+    }
+
+@api_router.post("/auth/force-reseed")
+async def force_reseed():
+    """Force re-sync of admin user from .env values. Public endpoint for emergency recovery."""
+    await seed_admin()
+    users = await db.users.find({'role': 'super_admin'}, {'_id': 0, 'password_hash': 0}).to_list(10)
+    return {'ok': True, 'super_admins': users, 'message': 'Admin re-seeded from .env'}
 
 @api_router.get("/auth/me", response_model=UserOut)
 async def me(user=Depends(get_current_user)):
