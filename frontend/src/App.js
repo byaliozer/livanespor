@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/contexts/AuthContext";
+import ScrollToTop from "@/components/ScrollToTop";
 import "@/App.css";
 
 // Public pages
@@ -50,6 +51,7 @@ function App() {
     return (
         <AuthProvider>
             <BrowserRouter>
+                <ScrollToTop />
                 <Toaster position="top-right" richColors theme="dark" />
                 <Routes>
                     <Route path="/" element={<Home />} />

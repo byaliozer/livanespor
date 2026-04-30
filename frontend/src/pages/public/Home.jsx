@@ -81,10 +81,10 @@ const Home = () => {
                                 <div className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.3em] mb-4">Sıradaki Maç · {data.next?.competition || "BAL Ligi"}</div>
                                 {data.next?.id ? (
                                     <>
-                                        <div className="font-display uppercase leading-[0.95] tracking-tight grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] sm:items-baseline gap-x-4 gap-y-1 text-[clamp(2rem,6vw,4.5rem)]">
+                                        <div className="font-display uppercase leading-[0.95] tracking-tight flex flex-col gap-1 text-[clamp(1.75rem,5vw,4.5rem)]">
                                             <span className="break-words">{data.next.home_team}</span>
-                                            <span className="text-black/50 sm:px-2">VS</span>
-                                            <span className="break-words sm:text-right">{data.next.away_team}</span>
+                                            <span className="text-black/40 text-[0.55em] tracking-[0.3em] font-bold">VS</span>
+                                            <span className="break-words">{data.next.away_team}</span>
                                         </div>
                                         <div className="mt-6 flex flex-wrap gap-x-4 gap-y-2 text-xs sm:text-sm font-semibold">
                                             <div className="flex items-center gap-2"><Calendar className="w-4 h-4 shrink-0" /> {new Date(data.next.match_date).toLocaleString("tr-TR", { dateStyle: "long", timeStyle: "short" })}</div>

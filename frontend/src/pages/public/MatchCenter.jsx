@@ -24,10 +24,10 @@ const MatchCenter = () => {
                         <div className="absolute top-0 right-0 font-display text-[20vw] leading-none text-black/5 select-none pointer-events-none">NEXT</div>
                         <div className="relative">
                             <div className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.3em]">Sıradaki Maç · {data.next.competition}</div>
-                            <div className="font-display uppercase mt-3 leading-[0.95] tracking-tight grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] sm:items-baseline gap-x-4 gap-y-1 text-[clamp(2rem,7vw,4.5rem)]">
+                            <div className="font-display uppercase mt-3 leading-[0.95] tracking-tight flex flex-col gap-1 text-[clamp(2rem,7vw,5rem)]">
                                 <span className="break-words">{data.next.home_team}</span>
-                                <span className="text-black/40 sm:px-2">VS</span>
-                                <span className="break-words sm:text-right">{data.next.away_team}</span>
+                                <span className="text-black/40 text-[0.5em] tracking-[0.3em] font-bold">VS</span>
+                                <span className="break-words">{data.next.away_team}</span>
                             </div>
                             <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs sm:text-sm font-semibold">
                                 <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4 shrink-0" /> {new Date(data.next.match_date).toLocaleString("tr-TR")}</span>
