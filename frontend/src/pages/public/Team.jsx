@@ -42,7 +42,7 @@ const Team = () => {
                         <div className="text-xs font-bold uppercase tracking-[0.3em]">Sıradaki Maç</div>
                         {data.next?.id ? (
                             <>
-                                <div className="font-display text-3xl mt-2 leading-tight">{data.next.opponent}</div>
+                                <div className="font-display text-2xl sm:text-3xl mt-2 leading-tight break-words">{data.next.opponent}</div>
                                 <div className="text-sm font-semibold mt-1">{new Date(data.next.match_date).toLocaleString("tr-TR")}</div>
                                 <Link to="/mac-merkezi" className="mt-4 inline-block underline font-bold text-sm">Detay →</Link>
                             </>

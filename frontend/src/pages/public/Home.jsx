@@ -75,26 +75,26 @@ const Home = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                     {/* Next Match */}
                     <Reveal className="lg:col-span-7">
-                        <div className="bg-gradient-to-br from-liv-yellow to-yellow-500 text-black p-8 md:p-12 relative overflow-hidden h-full" data-testid="next-match-card">
+                        <div className="bg-gradient-to-br from-liv-yellow to-yellow-500 text-black p-6 sm:p-8 md:p-12 relative overflow-hidden h-full" data-testid="next-match-card">
                             <div className="absolute top-0 right-0 font-display text-[20vw] leading-none text-black/5 select-none pointer-events-none">NEXT</div>
                             <div className="relative">
-                                <div className="text-xs font-bold uppercase tracking-[0.3em] mb-4">Sıradaki Maç · {data.next?.competition || "BAL Ligi"}</div>
+                                <div className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.3em] mb-4">Sıradaki Maç · {data.next?.competition || "BAL Ligi"}</div>
                                 {data.next?.id ? (
                                     <>
-                                        <div className="font-display text-5xl md:text-7xl uppercase leading-none">
-                                            {data.next.home_team}
-                                            <span className="text-black/50 mx-3 md:mx-5">VS</span>
-                                            {data.next.away_team}
+                                        <div className="font-display uppercase leading-[0.95] tracking-tight grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] sm:items-baseline gap-x-4 gap-y-1 text-[clamp(2rem,6vw,4.5rem)]">
+                                            <span className="break-words">{data.next.home_team}</span>
+                                            <span className="text-black/50 sm:px-2">VS</span>
+                                            <span className="break-words sm:text-right">{data.next.away_team}</span>
                                         </div>
-                                        <div className="mt-6 flex flex-wrap gap-4 text-sm font-semibold">
-                                            <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /> {new Date(data.next.match_date).toLocaleString("tr-TR", { dateStyle: "long", timeStyle: "short" })}</div>
-                                            <div className="flex items-center gap-2"><MapPin className="w-4 h-4" /> {data.next.venue}</div>
+                                        <div className="mt-6 flex flex-wrap gap-x-4 gap-y-2 text-xs sm:text-sm font-semibold">
+                                            <div className="flex items-center gap-2"><Calendar className="w-4 h-4 shrink-0" /> {new Date(data.next.match_date).toLocaleString("tr-TR", { dateStyle: "long", timeStyle: "short" })}</div>
+                                            <div className="flex items-center gap-2"><MapPin className="w-4 h-4 shrink-0" /> {data.next.venue}</div>
                                         </div>
-                                        <div className="mt-8">
+                                        <div className="mt-6 sm:mt-8">
                                             <Countdown targetIso={data.next.match_date} />
                                         </div>
-                                        <div className="mt-8 flex flex-wrap gap-3">
-                                            <Link to="/mac-merkezi" className="inline-flex items-center gap-2 bg-black text-liv-yellow px-6 py-3 font-bold uppercase tracking-wider text-sm hover:bg-neutral-900" data-testid="next-match-cta">
+                                        <div className="mt-6 sm:mt-8 flex flex-wrap gap-3">
+                                            <Link to="/mac-merkezi" className="inline-flex items-center gap-2 bg-black text-liv-yellow px-5 py-2.5 sm:px-6 sm:py-3 font-bold uppercase tracking-wider text-xs sm:text-sm hover:bg-neutral-900" data-testid="next-match-cta">
                                                 Maç Detayı <ArrowRight className="w-4 h-4" />
                                             </Link>
                                         </div>
@@ -113,17 +113,17 @@ const Home = () => {
                             {data.last?.id ? (
                                 <>
                                     <div className="text-sm text-neutral-400">{data.last.competition} · {new Date(data.last.match_date).toLocaleDateString("tr-TR")}</div>
-                                    <div className="my-6 flex items-center justify-between gap-3">
-                                        <div className="flex-1">
-                                            <div className="text-xs uppercase text-neutral-500 mb-1">Ev</div>
-                                            <div className="font-display text-2xl md:text-3xl">{data.last.home_team}</div>
+                                    <div className="my-6 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                                        <div>
+                                            <div className="text-[10px] sm:text-xs uppercase text-neutral-500 mb-1">Ev</div>
+                                            <div className="font-display text-[clamp(1rem,3.5vw,1.875rem)] leading-tight break-words">{data.last.home_team}</div>
                                         </div>
-                                        <div className="font-display text-5xl md:text-7xl text-liv-yellow tabular-nums">
+                                        <div className="font-display text-liv-yellow tabular-nums text-[clamp(1.75rem,6vw,4.5rem)] leading-none">
                                             {data.last.home_score} - {data.last.away_score}
                                         </div>
-                                        <div className="flex-1 text-right">
-                                            <div className="text-xs uppercase text-neutral-500 mb-1">Deplasman</div>
-                                            <div className="font-display text-2xl md:text-3xl">{data.last.away_team}</div>
+                                        <div className="text-right">
+                                            <div className="text-[10px] sm:text-xs uppercase text-neutral-500 mb-1">Deplasman</div>
+                                            <div className="font-display text-[clamp(1rem,3.5vw,1.875rem)] leading-tight break-words">{data.last.away_team}</div>
                                         </div>
                                     </div>
                                     <p className="text-neutral-300 text-sm leading-relaxed">{data.last.summary}</p>

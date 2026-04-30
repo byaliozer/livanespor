@@ -20,30 +20,33 @@ const MatchCenter = () => {
                 <h1 className="font-display text-6xl md:text-8xl uppercase mt-2">MAÇ MERKEZİ</h1>
 
                 {data.next?.id && (
-                    <div className="mt-12 bg-gradient-to-br from-liv-yellow to-yellow-500 text-black p-8 md:p-12 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 font-display text-[20vw] leading-none text-black/5 select-none">NEXT</div>
+                    <div className="mt-12 bg-gradient-to-br from-liv-yellow to-yellow-500 text-black p-6 sm:p-8 md:p-12 relative overflow-hidden" data-testid="next-match-card">
+                        <div className="absolute top-0 right-0 font-display text-[20vw] leading-none text-black/5 select-none pointer-events-none">NEXT</div>
                         <div className="relative">
-                            <div className="text-xs font-bold uppercase tracking-[0.3em]">Sıradaki Maç</div>
-                            <div className="font-display text-5xl md:text-7xl uppercase mt-2 leading-none">{data.next.home_team} <span className="text-black/40 mx-3">VS</span> {data.next.away_team}</div>
-                            <div className="mt-4 flex flex-wrap gap-4 text-sm font-semibold">
-                                <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4" /> {new Date(data.next.match_date).toLocaleString("tr-TR")}</span>
-                                <span className="flex items-center gap-1.5"><MapPin className="w-4 h-4" /> {data.next.venue}</span>
-                                <span className="flex items-center gap-1.5"><Trophy className="w-4 h-4" /> {data.next.competition}</span>
+                            <div className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.3em]">Sıradaki Maç · {data.next.competition}</div>
+                            <div className="font-display uppercase mt-3 leading-[0.95] tracking-tight grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr] sm:items-baseline gap-x-4 gap-y-1 text-[clamp(2rem,7vw,4.5rem)]">
+                                <span className="break-words">{data.next.home_team}</span>
+                                <span className="text-black/40 sm:px-2">VS</span>
+                                <span className="break-words sm:text-right">{data.next.away_team}</span>
                             </div>
-                            <div className="mt-8"><Countdown targetIso={data.next.match_date} /></div>
+                            <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs sm:text-sm font-semibold">
+                                <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4 shrink-0" /> {new Date(data.next.match_date).toLocaleString("tr-TR")}</span>
+                                <span className="flex items-center gap-1.5"><MapPin className="w-4 h-4 shrink-0" /> {data.next.venue}</span>
+                            </div>
+                            <div className="mt-6 sm:mt-8"><Countdown targetIso={data.next.match_date} /></div>
                         </div>
                     </div>
                 )}
 
                 {data.last?.id && (
-                    <div className="mt-8 bg-liv-card border border-liv-border p-8 md:p-10">
+                    <div className="mt-8 bg-liv-card border border-liv-border p-6 sm:p-8 md:p-10">
                         <div className="overline">Son Maç</div>
-                        <div className="mt-4 flex items-center justify-between gap-4">
-                            <div className="flex-1 font-display text-2xl md:text-4xl uppercase">{data.last.home_team}</div>
-                            <div className="font-display text-5xl md:text-7xl text-liv-yellow tabular-nums">{data.last.home_score} - {data.last.away_score}</div>
-                            <div className="flex-1 text-right font-display text-2xl md:text-4xl uppercase">{data.last.away_team}</div>
+                        <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3 sm:gap-6">
+                            <div className="font-display uppercase break-words text-[clamp(1rem,4vw,2.25rem)] leading-tight">{data.last.home_team}</div>
+                            <div className="font-display text-liv-yellow tabular-nums text-[clamp(1.75rem,7vw,4.5rem)] leading-none">{data.last.home_score} - {data.last.away_score}</div>
+                            <div className="text-right font-display uppercase break-words text-[clamp(1rem,4vw,2.25rem)] leading-tight">{data.last.away_team}</div>
                         </div>
-                        <p className="mt-4 text-neutral-300">{data.last.summary}</p>
+                        {data.last.summary ? <p className="mt-4 text-neutral-300 text-sm sm:text-base">{data.last.summary}</p> : null}
                     </div>
                 )}
 
