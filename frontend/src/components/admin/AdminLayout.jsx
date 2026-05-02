@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { Link, useNavigate, useLocation, NavLink } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { APP_VERSION, BUILD_DATE } from "@/version";
 import {
     LayoutDashboard, Users, UserCog, Calendar, Trophy, Sparkles, Image,
     Newspaper, GraduationCap, ClipboardList, Settings, LogOut, Layers,
@@ -91,6 +92,10 @@ const AdminLayout = ({ children }) => {
                     <Link to="/" className="w-full flex items-center gap-2 px-2 py-2 text-sm text-neutral-300 hover:bg-liv-card hover:text-liv-yellow rounded" target="_blank">
                         ↗ Siteyi Görüntüle
                     </Link>
+                    <div className="mt-3 pt-3 border-t border-liv-border/60 px-2 flex items-center justify-between text-[10px] uppercase tracking-widest text-neutral-500" data-testid="admin-version-footer">
+                        <span>Sürüm <span className="text-liv-yellow font-bold">v{APP_VERSION}</span></span>
+                        <span className="text-neutral-600">{BUILD_DATE}</span>
+                    </div>
                 </div>
             </aside>
             <main className="flex-1 min-w-0">

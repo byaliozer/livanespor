@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { LogIn, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { APP_VERSION, BUILD_DATE } from "@/version";
 
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_401d88f4-8dae-48a8-9716-45cb5be0ec5c/artifacts/4x1k75zi_Livanespor_SARI_SIYAH_NEW%20genelde%20bu.png";
 
@@ -62,6 +63,10 @@ const AdminLogin = () => {
                     <button disabled={loading} type="submit" className="btn-primary w-full mt-6 inline-flex items-center justify-center gap-2 disabled:opacity-60" data-testid="admin-login-submit">
                         <LogIn className="w-4 h-4" /> {loading ? "Giriş yapılıyor..." : "Giriş Yap"}
                     </button>
+                    <div className="mt-8 pt-4 border-t border-liv-border/60 flex items-center justify-between text-[10px] uppercase tracking-widest text-neutral-500" data-testid="admin-login-version">
+                        <span>Sürüm <span className="text-liv-yellow font-bold">v{APP_VERSION}</span></span>
+                        <span className="text-neutral-600">Build {BUILD_DATE}</span>
+                    </div>
                 </form>
             </div>
         </div>
