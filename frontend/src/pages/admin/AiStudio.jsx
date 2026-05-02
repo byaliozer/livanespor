@@ -329,27 +329,27 @@ const AiStudio = () => {
 
                             {active.key === "special_day" && (
                                 <>
-                                    <div><label className="liv-label">Başlık</label><input className="liv-input" value={ctx.title || ""} placeholder="23 NİSAN" onChange={(e) => setCtxField("title", e.target.value)} /></div>
-                                    <div><label className="liv-label">Gövde Metni</label><textarea rows={3} className="liv-input" value={ctx.body_text || ""} placeholder="23 Nisan Ulusal Egemenlik ve Çocuk Bayramı kutlu olsun." onChange={(e) => setCtxField("body_text", e.target.value)} /></div>
-                                    <div><label className="liv-label">Tür İpucu (opsiyonel)</label><input className="liv-input" value={ctx.occasion_hint || ""} placeholder="resmi bayram / dini bayram / kuruluş yıldönümü" onChange={(e) => setCtxField("occasion_hint", e.target.value)} /></div>
+                                    <div><label className="liv-label">Başlık</label><input className="liv-input" value={ctx.title || ""} placeholder="23 NİSAN" onChange={(e) => setCtxField("title", e.target.value)} data-testid="field-title" /></div>
+                                    <div><label className="liv-label">Gövde Metni</label><textarea rows={3} className="liv-input" value={ctx.body_text || ""} placeholder="23 Nisan Ulusal Egemenlik ve Çocuk Bayramı kutlu olsun." onChange={(e) => setCtxField("body_text", e.target.value)} data-testid="field-body-text" /></div>
+                                    <div><label className="liv-label">Tür İpucu (opsiyonel)</label><input className="liv-input" value={ctx.occasion_hint || ""} placeholder="resmi bayram / dini bayram / kuruluş yıldönümü" onChange={(e) => setCtxField("occasion_hint", e.target.value)} data-testid="field-occasion-hint" /></div>
                                 </>
                             )}
 
                             {active.key === "new_transfer" && (
-                                <div><label className="liv-label">Önceki Kulüp (opsiyonel)</label><input className="liv-input" value={ctx.from_club || ""} onChange={(e) => setCtxField("from_club", e.target.value)} /></div>
+                                <div><label className="liv-label">Önceki Kulüp (opsiyonel)</label><input className="liv-input" value={ctx.from_club || ""} onChange={(e) => setCtxField("from_club", e.target.value)} data-testid="field-from-club" /></div>
                             )}
 
                             {active.key === "fan_invite" && (
                                 <>
-                                    <div><label className="liv-label">Maç Metni</label><input className="liv-input" value={ctx.match_text || ""} placeholder="Pazar 19:00 Yolçatı" onChange={(e) => setCtxField("match_text", e.target.value)} /></div>
-                                    <div><label className="liv-label">Taraftar Mesajı</label><input className="liv-input" value={ctx.message || ""} placeholder="Tribünlere bekliyoruz!" onChange={(e) => setCtxField("message", e.target.value)} /></div>
+                                    <div><label className="liv-label">Maç Metni</label><input className="liv-input" value={ctx.match_text || ""} placeholder="Pazar 19:00 Yolçatı" onChange={(e) => setCtxField("match_text", e.target.value)} data-testid="field-match-text" /></div>
+                                    <div><label className="liv-label">Taraftar Mesajı</label><input className="liv-input" value={ctx.message || ""} placeholder="Tribünlere bekliyoruz!" onChange={(e) => setCtxField("message", e.target.value)} data-testid="field-message" /></div>
                                 </>
                             )}
 
                             {active.key === "motm" && (
                                 <>
-                                    <div><label className="liv-label">Alt Başlık (opsiyonel)</label><input className="liv-input" value={ctx.subtitle || ""} placeholder="3. Hafta" onChange={(e) => setCtxField("subtitle", e.target.value)} /></div>
-                                    <div><label className="liv-label">Maç Bağlamı (opsiyonel)</label><input className="liv-input" value={ctx.match_context || ""} placeholder="Livanespor 3-1 Gemlik" onChange={(e) => setCtxField("match_context", e.target.value)} /></div>
+                                    <div><label className="liv-label">Alt Başlık (opsiyonel)</label><input className="liv-input" value={ctx.subtitle || ""} placeholder="3. Hafta" onChange={(e) => setCtxField("subtitle", e.target.value)} data-testid="field-subtitle" /></div>
+                                    <div><label className="liv-label">Maç Bağlamı (opsiyonel)</label><input className="liv-input" value={ctx.match_context || ""} placeholder="Livanespor 3-1 Gemlik" onChange={(e) => setCtxField("match_context", e.target.value)} data-testid="field-match-context" /></div>
                                 </>
                             )}
 

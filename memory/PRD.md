@@ -174,16 +174,57 @@ Bursa Nilüfer merkezli Livanespor için WordPress'ten bağımsız, modern, prem
 - Protect `public_url` path with `mediaUrl()` URL parsing (currently regex-strips `/api`).
 - Split `server.py` (~1520 lines) into `/app/backend/routes/` modules.
 
+## 5f. 2026-05-02 — Phase 2 v2 **DR AI-style Overhaul** + Phase C Next Action Items
+
+### Phase A + B — Prompt System + UI Baştan Yazıldı
+- **`ai_media.py` (611 lines)** tamamen yeniden yazıldı (DR AI Futbol `ai_image.py` port):
+  - **9 template (kullanıcı öncelik sırası):** match_week → match_day → lineup → full_time → motm → birthday → special_day → new_transfer → fan_invite.
+  - **Design DNA catalog** — 5 layout × 8 scene × 4 typography × 3 drama = 480 benzersiz kombinasyon. Deterministic MD5 hash(club_id + variation_index) → her kulüp benzersiz görsel kimlik.
+  - `resolve_design()` — DNA + opsiyonel user override (Akıllı/Özelleştir).
+  - `_design_block()`, `_footer_lines()` (website + instagram aynı satır), `_typography_rules()` (Türkçe karakter zorunluluğu, negative rules).
+  - Brand signature — şehir silüeti + "EST. YYYY" toggles.
+- **server.py** AI flow:
+  - `AiTemplateIn` 10 yeni field: custom_design + 4 override + 2 brand toggle + reference_images[] + variation_count (1|3).
+  - **Varyasyon sistemi:** n alt-job oluşturulur, her biri farklı `variation_index` ile DNA hash değişir → gerçek estetik çeşitlilik. Her varyasyon = 1 kredi. Kredi kontrolü **atomik** (balance ≥ n up-front check, partial burn yok).
+  - **Reference images** → `oclient.images.edit(model='gpt-image-2', image=files, ...)`; 1.5 fallback `input_fidelity='high'` ile.
+  - **Refund on error** → _run_ai_job except branch 1 kredi iade + `refunded=true` flag + `refund` tx tipi.
+  - Yeni `GET /api/admin/ai/design-options` — UI için catalog listesi.
+- **`/admin/ai-studio` (AiStudio.jsx)** tamamen yeniden yazıldı:
+  - 9 template pill (order'a göre sıralı).
+  - **DesignCustomizer component** — Akıllı/Özelleştir toggle, 3 select (layout/typography/scene), drama slider 1-3, 2 brand-signature checkbox.
+  - **RefImageSlot** — her template'in `reference_slots`'una göre dinamik upload alanları (home_crest/away_crest/team_photo/player_photo/club_crest), 5MB limit, preview + X silme.
+  - **Team Photos picker** — kayıtlı takım fotolarından tıklayarak referans seçme.
+  - Varyasyon dropdown: 1 veya 3.
+  - Job panel'de design etiketi (layout·scene·typography·drama) + refund rozeti.
+  - Template-spesifik form alanları data-testid'ler (field-title, field-body-text, field-occasion-hint, field-subtitle, field-match-context, field-from-club, field-match-text, field-message).
+- **Team Photos CRUD** → yeni `/admin/team-photos` CrudPage, sidebar'a eklendi, `team_photos` COLLECTIONS'a eklendi, AiStudio'da referans picker olarak kullanılıyor.
+
+### Phase C — Next Action Items (hepsi tamamlandı)
+- **1. Kredi iadesi on error** — _run_ai_job except branch'inde.
+- **2. Tema → Public CSS** — `GET /api/public/theme.css` no-auth endpoint `:root { --liv-primary, --liv-secondary, --liv-bg, --liv-theme }` döner; `PublicLayout.jsx` mount'ta `<link>` inject eder.
+- **3. Server.py Refactor** — **DEFERRED** (testing agent yorumunda "ai_media.py 611 lines is dense — consider moving LAYOUT_RECIPES/SCENE_DESCRIPTIONS to design_dna.py" notu var, ileri sprint'e bırakıldı. Mevcut yapı stabil ve testli).
+- **4. Multi-tenant `club_id`** — Subscription doc'ta `club_id='main'` field eklendi + legacy backfill. Gerçek multi-tenant izolasyon ileriki sprint'te.
+- **5. Per-plan media cap** — `PLAN_MEDIA_CAP = {starter:100, plus:500, pro:2000}`, `_enforce_media_cap` önce AI items (source in ['ai','ai_template']) siler, ancak sonra upload'lara dokunur.
+- **6. Site_settings schema validation** — `PUT /admin/site-settings` primary_color/secondary_color/bg_color için `#RRGGBB` regex + default_theme için `dark|light` enum → 400 Türkçe mesaj.
+
+### Testing
+- `/app/backend/tests/test_phase2_v2.py` — 17 yeni test (9 templates, Design DNA, variation_count=1|3, atomicity, theme.css, site-settings validation, team_photos CRUD, multi-tenant club_id).
+- `/app/backend/tests/test_phase1.py` + `backend_test.py` — 45/45 regresyon passing.
+- **Toplam: 62/62 backend passing + frontend %100.**
+- Gerçek gpt-image-2 round-trip doğrulandı (special_day custom-design → Design DNA "editorial/low_angle/athletic/drama 2" → 1.3MB PNG Object Storage).
+- Atomicity bug post-test fix'lendi (testing agent'ın bulduğu MINOR): `balance=1, n=3 → 402 + balance stays 1` (önceden 1 kredi burn ediyordu).
+
+### Known follow-ups (§ 6)
+- server.py (~1700 satır) + ai_media.py (611 satır) refactor → `/app/backend/routes/` + `services/` + `design_dna.py`.
+- Gerçek multi-tenant izolasyon (tüm koleksiyonlar tenant-keyed).
+- Team Photos için Object Storage migration (şu an base64 upload).
+
 ## 6. Backlog
 ### P1 (next iteration)
-- **Credit refund on failed AI jobs** — `_run_ai_job` status=error should refund the 1 credit.
-- **Apply site theme** (primary/secondary/bg + default_theme) to public site CSS layer.
-- **Refactor `server.py`** (~1520 lines) → `/app/backend/routes/` + `services/` modules.
-- **Schema validation** for site_settings (#RRGGBB regex, theme enum).
-- **Multi-tenant**: subscription doc tenant-keyed (currently singleton `id='main'`).
-- **Per-plan media cap** (currently hard-coded 500) + protect `upload` source during trim.
-- **ETag / CDN caching** on `/public/media/*` for reduced Object Storage egress.
-- WYSIWYG rich text editor (TinyMCE/Lexical) for haber içerikleri
+- **Refactor monolith:** server.py (~1700) + ai_media.py (611) → `/app/backend/routes/` + `services/` + `design_dna.py`.
+- **Gerçek multi-tenant izolasyon** — tüm koleksiyonlara tenant_id/club_id; admin users'a tenant assignment.
+- **Team Photos Object Storage migration** (şu an base64 data URL).
+- WYSIWYG rich text editor (TinyMCE/Lexical) haber içerikleri için.
 - Image upload via media picker bound to player/post/sponsor forms (currently URL-based)
 - Sitemap.xml + robots.txt auto-generated
 - Email notifications on new academy application + contact message

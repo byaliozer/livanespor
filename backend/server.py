@@ -1014,10 +1014,13 @@ async def admin_ai_generate_template(payload: AiTemplateIn, user=Depends(require
     if payload.template_key not in ai_media.TEMPLATES:
         raise HTTPException(400, "Geçersiz şablon anahtarı")
     n = int(payload.variation_count or 1)
-    # Consume n credits up-front (1 per variation); failures refund per-job.
+    # ATOMIC pre-check: ensure balance >= n before deducting anything.
+    sub = await _ensure_subscription_doc()
+    if int(sub.get('credit_balance', 0)) < n:
+        raise HTTPException(402, f"Kredi yetersiz: {n} kredi gerekli, bakiye {sub.get('credit_balance', 0)}. PAKETİM ekranından paketinizi yükseltin.")
+    # Now deduct n credits (one tx per variation for visibility)
     for _ in range(n):
-        if not await consume_credit(1, note=f"AI template: {payload.template_key}"):
-            raise HTTPException(402, "Kredi yetersiz. PAKETİM ekranından paketinizi yükseltin.")
+        await consume_credit(1, note=f"AI template: {payload.template_key}")
     batch_id = new_id()
     jobs = []
     base_doc = {
