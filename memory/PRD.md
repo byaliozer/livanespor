@@ -97,8 +97,52 @@ Bursa Nilüfer merkezli Livanespor için WordPress'ten bağımsız, modern, prem
 - **Players admin**: photo_url alanı `type: "image"` yapıldı → admin panelinden artık dosya yükleyerek oyuncu portresi eklenebilir.
 - New deps: `APScheduler==3.10.4`, `pytz`.
 
+## 5d. 2026-05-02 — DR AI Futbol Merger **Phase 1: Club Info, Dashboard, PAKETİM**
+**Goal:** Lay the SaaS foundation (subscription, theme, dashboard overhaul, birthdays) before wiring AI Media generation in Phase 2.
+
+### Backend (`server.py`)
+- New `PLAN_LIMITS` dict (starter=30, plus=100, pro=500 credits/month).
+- New collection `subscriptions` (singleton `id='main'` for now; will become tenant-keyed in multi-tenant rollout).
+- `_ensure_subscription_doc()` — auto-creates Starter plan on first call and auto-resets credits when `last_reset_year_month` changes (logs `monthly_reset` tx).
+- New endpoints (all super_admin gated for write; require_admin for read):
+  - `GET /api/admin/subscription` → current plan + recent 50 tx.
+  - `PUT /api/admin/subscription/plan` → switch plan (starter/plus/pro); resets balance & logs `plan_change`.
+  - `POST /api/admin/subscription/credit-adjust` → manual ±adjust, clamped at 0; logs `manual_adjust`.
+  - `consume_credit(n, note)` helper (**not yet wired** into AI endpoint — for Phase 2).
+- Birthdays: `_upcoming_birthdays(days_ahead=30)` parses `players.birth_date` (YYYY-MM-DD), computes next occurrence + days_until + turning_age.
+- New `GET /api/admin/dashboard/birthdays?days=30`.
+- `GET /api/admin/dashboard/stats` extended: `media_total`, `upcoming_birthdays` (top 6), `mackolik` summary, `subscription` summary.
+- `site_settings` schema extended via GenericIn: `short_name`, `primary_color`, `secondary_color`, `bg_color`, `instagram_username`, `default_theme`.
+
+### Frontend
+- New page `/admin/paketim` (`Paketim.jsx`) — current plan + credit bar + total used, 3 plan cards (with "Popüler" / "Aktif" badges), manual ±credit adjust, transaction history.
+- `Dashboard.jsx` overhauled — subscription card, Mackolik card, 10-card stat grid (Media + Yakın Doğum Günü added), 3-col bottom (Yaklaşan Doğum Günleri, Son Başvurular, Son Mesajlar), 5 quick-action buttons.
+- `Settings.jsx` reorganized — Kulüp Kimliği (short_name, sezon), Tema & Renkler (3 color pickers + theme select + live swatches), İletişim, Sosyal Medya (Instagram username).
+- `Players.jsx` — added `birth_date` text field (YYYY-MM-DD).
+- `AdminLayout.jsx` — sidebar gains "Paketim" under Sistem with `Package` icon.
+- `App.js` — new route `/admin/paketim`.
+- `api.js` — `adminApi.subscription / setPlan / adjustCredits / birthdays`.
+
+### Tests
+- `/app/backend/tests/test_phase1.py` — 12 new tests (subscription auto-init, plan switching, credit adjust clamp, monthly reset logic, birthdays computation, site-settings persistence, anon gating).
+- Regression `/app/backend/tests/backend_test.py` — 32/32 still green.
+- Frontend E2E: all new data-testids verified; dashboard, paketim flow, settings save+reload, players birth_date → dashboard birthday card.
+- **Result: 44/44 backend passing, frontend 100%.**
+
+### Known follow-ups (tracked in § 6)
+- Wire `consume_credit()` into `POST /admin/ai/generate-image` before credit metering goes live.
+- Add `#RRGGBB` regex and theme enum validation to site-settings.
+- Apply `primary_color / secondary_color / bg_color / default_theme` to the public site CSS (currently persisted only).
+- Split `server.py` into routers/services before Phase 2.
+
 ## 6. Backlog
 ### P1 (next iteration)
+- **Phase 2: AI Media Generator** — 8 templates (Maç Günü, İlk 11, Gol, Doğum Günü vs.), gpt-image-2 via Emergent LLM key, Pillow fallback, APScheduler async polling, wire `consume_credit()` into AI endpoint.
+- **Phase 3: Media Archive** — Emergent object storage, archive page 500-item cap, download/share buttons.
+- Apply Settings theme colors (primary/secondary/bg + default_theme) to public site CSS layer.
+- Refactor `server.py` (~1280 lines) into `/app/backend/routes/` + `services/` modules before Phase 2.
+- Schema validation for site_settings (#RRGGBB regex, theme enum).
+- Multi-tenant: subscription doc tenant-keyed (currently singleton `id='main'`).
 - WYSIWYG rich text editor (TinyMCE/Lexical) for haber içerikleri
 - Image upload via media picker bound to player/post/sponsor forms (currently URL-based)
 - Sitemap.xml + robots.txt auto-generated
