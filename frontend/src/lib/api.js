@@ -104,4 +104,10 @@ export const adminApi = {
     saveMackolikSettings: (data) => api.put("/admin/mackolik/settings", data).then((r) => r.data),
     mackolikTest: () => api.post("/admin/mackolik/test").then((r) => r.data),
     mackolikSync: (options) => api.post("/admin/mackolik/sync", options, { timeout: 180000 }).then((r) => r.data),
+    // Subscription ("Paketim")
+    subscription: () => api.get("/admin/subscription").then((r) => r.data),
+    setPlan: (plan_name) => api.put("/admin/subscription/plan", { plan_name }).then((r) => r.data),
+    adjustCredits: (amount, note) => api.post("/admin/subscription/credit-adjust", { amount, note }).then((r) => r.data),
+    // Dashboard birthdays
+    birthdays: (days = 30) => api.get("/admin/dashboard/birthdays", { params: { days } }).then((r) => r.data),
 };

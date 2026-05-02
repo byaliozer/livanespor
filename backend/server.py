@@ -703,11 +703,193 @@ async def admin_media_upload(payload: MediaUploadIn, user=Depends(require_admin)
         'data_url': payload.data_url,
     })
 
+# ─────────────────────────── Subscription Packages ───────────────────────────
+PLAN_LIMITS = {
+    'starter': {'monthly_credit_limit': 30, 'display_name': 'Starter'},
+    'plus':    {'monthly_credit_limit': 100, 'display_name': 'Plus'},
+    'pro':     {'monthly_credit_limit': 500, 'display_name': 'Pro'},
+}
+
+def _current_year_month() -> str:
+    dt = datetime.now(timezone.utc)
+    return f"{dt.year:04d}-{dt.month:02d}"
+
+async def _ensure_subscription_doc() -> dict:
+    """Get or create the default subscription doc (id=main). Auto-resets monthly credits."""
+    doc = await db.subscriptions.find_one({'id': 'main'}, {'_id': 0})
+    now_ym = _current_year_month()
+    if not doc:
+        defaults = PLAN_LIMITS['starter']
+        doc = {
+            'id': 'main',
+            'plan_name': 'starter',
+            'plan_display_name': defaults['display_name'],
+            'monthly_credit_limit': defaults['monthly_credit_limit'],
+            'credit_balance': defaults['monthly_credit_limit'],
+            'last_reset_year_month': now_ym,
+            'total_used_all_time': 0,
+            'transactions': [],
+            'created_at': now_iso(),
+            'updated_at': now_iso(),
+        }
+        await db.subscriptions.insert_one(dict(doc))
+        doc.pop('_id', None)
+    # Monthly auto-reset
+    if doc.get('last_reset_year_month') != now_ym:
+        limit = doc.get('monthly_credit_limit', 30)
+        await db.subscriptions.update_one(
+            {'id': 'main'},
+            {'$set': {
+                'credit_balance': limit,
+                'last_reset_year_month': now_ym,
+                'updated_at': now_iso(),
+            }, '$push': {'transactions': {
+                'type': 'monthly_reset', 'amount': limit,
+                'balance_after': limit, 'at': now_iso(),
+                'note': f'Aylık kredi yenilendi ({now_ym})',
+            }}},
+        )
+        doc = await db.subscriptions.find_one({'id': 'main'}, {'_id': 0})
+    return doc
+
+class SubscriptionPlanIn(BaseModel):
+    plan_name: Literal['starter', 'plus', 'pro']
+
+class CreditAdjustIn(BaseModel):
+    amount: int  # positive to add, negative to deduct
+    note: Optional[str] = None
+
+@api_router.get("/admin/subscription")
+async def admin_get_subscription(user=Depends(require_admin)):
+    doc = await _ensure_subscription_doc()
+    # Trim transactions to last 50 for response
+    tx = doc.get('transactions', [])
+    doc['transactions'] = tx[-50:][::-1]
+    return doc
+
+@api_router.put("/admin/subscription/plan")
+async def admin_set_subscription_plan(payload: SubscriptionPlanIn, user=Depends(require_admin)):
+    if user.get('role') != 'super_admin':
+        raise HTTPException(403, "Sadece süper admin paketi değiştirebilir")
+    plan = PLAN_LIMITS[payload.plan_name]
+    await _ensure_subscription_doc()
+    await db.subscriptions.update_one(
+        {'id': 'main'},
+        {'$set': {
+            'plan_name': payload.plan_name,
+            'plan_display_name': plan['display_name'],
+            'monthly_credit_limit': plan['monthly_credit_limit'],
+            'credit_balance': plan['monthly_credit_limit'],
+            'last_reset_year_month': _current_year_month(),
+            'updated_at': now_iso(),
+        }, '$push': {'transactions': {
+            'type': 'plan_change', 'amount': plan['monthly_credit_limit'],
+            'balance_after': plan['monthly_credit_limit'], 'at': now_iso(),
+            'note': f"Paket değişti → {plan['display_name']}",
+        }}},
+    )
+    doc = await db.subscriptions.find_one({'id': 'main'}, {'_id': 0})
+    doc['transactions'] = doc.get('transactions', [])[-50:][::-1]
+    return doc
+
+@api_router.post("/admin/subscription/credit-adjust")
+async def admin_credit_adjust(payload: CreditAdjustIn, user=Depends(require_admin)):
+    if user.get('role') != 'super_admin':
+        raise HTTPException(403, "Sadece süper admin kredi ayarlayabilir")
+    doc = await _ensure_subscription_doc()
+    new_bal = max(0, int(doc.get('credit_balance', 0)) + int(payload.amount))
+    await db.subscriptions.update_one(
+        {'id': 'main'},
+        {'$set': {'credit_balance': new_bal, 'updated_at': now_iso()},
+         '$push': {'transactions': {
+             'type': 'manual_adjust', 'amount': payload.amount,
+             'balance_after': new_bal, 'at': now_iso(),
+             'note': payload.note or ('Manuel ekleme' if payload.amount > 0 else 'Manuel düşüm'),
+         }}},
+    )
+    return {'ok': True, 'credit_balance': new_bal}
+
+async def consume_credit(n: int = 1, note: str = "AI media generate") -> bool:
+    """Deduct credits; returns False if insufficient. Used by AI endpoints."""
+    doc = await _ensure_subscription_doc()
+    if int(doc.get('credit_balance', 0)) < n:
+        return False
+    new_bal = int(doc.get('credit_balance', 0)) - n
+    await db.subscriptions.update_one(
+        {'id': 'main'},
+        {'$set': {
+            'credit_balance': new_bal,
+            'total_used_all_time': int(doc.get('total_used_all_time', 0)) + n,
+            'updated_at': now_iso(),
+        }, '$push': {'transactions': {
+            'type': 'usage', 'amount': -n, 'balance_after': new_bal,
+            'at': now_iso(), 'note': note,
+        }}},
+    )
+    return True
+
 # ─────────────────────────── Dashboard Stats ───────────────────────────
+def _parse_birth(b) -> Optional[datetime]:
+    if not b:
+        return None
+    try:
+        if isinstance(b, str):
+            # Accept YYYY-MM-DD or ISO
+            s = b[:10]
+            return datetime.strptime(s, '%Y-%m-%d')
+    except Exception:
+        return None
+    return None
+
+async def _upcoming_birthdays(days_ahead: int = 30) -> List[dict]:
+    """Return players whose birthday falls in next N days (month/day based)."""
+    rows = await db.players.find({'active': {'$ne': False}}, {'_id': 0}).to_list(500)
+    today = datetime.now(timezone.utc).date()
+    out = []
+    for p in rows:
+        bd = _parse_birth(p.get('birth_date'))
+        if not bd:
+            continue
+        # Next occurrence this year or next
+        try:
+            this_year = bd.replace(year=today.year).date()
+        except ValueError:
+            continue
+        delta = (this_year - today).days
+        if delta < 0:
+            try:
+                next_year = bd.replace(year=today.year + 1).date()
+                delta = (next_year - today).days
+                upcoming_date = next_year
+            except ValueError:
+                continue
+        else:
+            upcoming_date = this_year
+        if 0 <= delta <= days_ahead:
+            age_turning = upcoming_date.year - bd.year
+            out.append({
+                'id': p.get('id'),
+                'slug': p.get('slug'),
+                'name': p.get('name'),
+                'photo_url': p.get('photo_url'),
+                'position': p.get('position'),
+                'jersey_number': p.get('jersey_number'),
+                'birth_date': p.get('birth_date'),
+                'upcoming_date': upcoming_date.isoformat(),
+                'days_until': delta,
+                'turning_age': age_turning,
+            })
+    out.sort(key=lambda x: x['days_until'])
+    return out
+
+@api_router.get("/admin/dashboard/birthdays")
+async def admin_birthdays(days: int = 30, user=Depends(require_admin)):
+    return await _upcoming_birthdays(days_ahead=days)
+
 @api_router.get("/admin/dashboard/stats")
 async def admin_dashboard_stats(user=Depends(require_admin)):
     [posts_total, posts_pub, posts_draft, players_active, sponsors_active,
-     upcoming_matches, applications_new, messages_unread] = await asyncio.gather(
+     upcoming_matches, applications_new, messages_unread, media_total] = await asyncio.gather(
         db.posts.count_documents({}),
         db.posts.count_documents({'status': 'published'}),
         db.posts.count_documents({'status': 'draft'}),
@@ -716,9 +898,13 @@ async def admin_dashboard_stats(user=Depends(require_admin)):
         db.matches.count_documents({'status': 'upcoming'}),
         db.academy_applications.count_documents({'status': 'new'}),
         db.contact_messages.count_documents({'status': 'unread'}),
+        db.media.count_documents({}),
     )
     recent_apps = await db.academy_applications.find({}, {'_id': 0}).sort('created_at', -1).limit(5).to_list(5)
     recent_msgs = await db.contact_messages.find({}, {'_id': 0}).sort('created_at', -1).limit(5).to_list(5)
+    birthdays = await _upcoming_birthdays(days_ahead=30)
+    macko = await db.site_settings.find_one({'id': 'mackolik'}, {'_id': 0}) or {}
+    subscription = await _ensure_subscription_doc()
     return {
         'posts_total': posts_total,
         'posts_published': posts_pub,
@@ -728,8 +914,24 @@ async def admin_dashboard_stats(user=Depends(require_admin)):
         'upcoming_matches': upcoming_matches,
         'applications_new': applications_new,
         'messages_unread': messages_unread,
+        'media_total': media_total,
         'recent_applications': recent_apps,
         'recent_messages': recent_msgs,
+        'upcoming_birthdays': birthdays[:6],
+        'mackolik': {
+            'enabled': macko.get('enabled', False),
+            'team_display_name': macko.get('team_display_name'),
+            'last_sync_at': macko.get('last_sync_at'),
+            'last_sync_status': macko.get('last_sync_status'),
+            'last_sync_summary': macko.get('last_sync_summary'),
+        },
+        'subscription': {
+            'plan_name': subscription.get('plan_name'),
+            'plan_display_name': subscription.get('plan_display_name'),
+            'credit_balance': subscription.get('credit_balance'),
+            'monthly_credit_limit': subscription.get('monthly_credit_limit'),
+            'last_reset_year_month': subscription.get('last_reset_year_month'),
+        },
     }
 
 # ─────────────────────────── Health ───────────────────────────

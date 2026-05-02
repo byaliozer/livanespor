@@ -46,6 +46,7 @@ import AdminSettings from "@/pages/admin/Settings";
 import AdminUsers from "@/pages/admin/Users";
 import AdminAccount from "@/pages/admin/Account";
 import AdminMackolik from "@/pages/admin/MackolikSync";
+import AdminPaketim from "@/pages/admin/Paketim";
 
 function App() {
     return (
@@ -94,6 +95,7 @@ function App() {
                     <Route path="/admin/users" element={<AdminLayout><AdminUsers /></AdminLayout>} />
                     <Route path="/admin/account" element={<AdminLayout><AdminAccount /></AdminLayout>} />
                     <Route path="/admin/mackolik" element={<AdminLayout><AdminMackolik /></AdminLayout>} />
+                    <Route path="/admin/paketim" element={<AdminLayout><AdminPaketim /></AdminLayout>} />
                 </Routes>
             </BrowserRouter>
         </AuthProvider>

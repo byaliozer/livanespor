@@ -4,8 +4,8 @@ import pytest
 import requests
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://ai-media-hub-37.preview.emergentagent.com').rstrip('/')
-ADMIN_EMAIL = "admin@livanespor.com"
-ADMIN_PASSWORD = "Livanespor2026!"
+ADMIN_EMAIL = "livanespor"
+ADMIN_PASSWORD = "Livanespor2026"
 
 
 # ─────────────── Fixtures ───────────────

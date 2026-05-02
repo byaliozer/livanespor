@@ -9,6 +9,7 @@ const fields = [
     ]},
     { name: "age", label: "Yaş", type: "number" },
     { name: "birth_year", label: "Doğum Yılı", type: "number" },
+    { name: "birth_date", label: "Doğum Tarihi (YYYY-MM-DD)", type: "text", placeholder: "1998-05-21" },
     { name: "height_cm", label: "Boy (cm)", type: "number" },
     { name: "preferred_foot", label: "Ayak", type: "select", options: [
         { value: "Sağ", label: "Sağ" }, { value: "Sol", label: "Sol" }, { value: "Çift", label: "Çift" },
