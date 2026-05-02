@@ -236,6 +236,13 @@ class TestAIImage:
                               json=payload, timeout=120)
         assert r.status_code == 200, f"AI gen failed: {r.status_code} {r.text[:500]}"
         d = r.json()
-        assert "data_url" in d
-        assert d["data_url"].startswith("data:image/")
+        # New behavior: either public_url (Object Storage) or data_url (fallback)
+        public_url = d.get("public_url")
+        data_url = d.get("data_url")
+        assert public_url or data_url, f"Expected public_url or data_url, got {d}"
+        if public_url:
+            assert public_url.startswith("/api/public/media/")
+            assert d.get("storage_path")
+        else:
+            assert data_url.startswith("data:image/")
         assert d.get("model") in ("gpt-image-2", "gpt-image-1")

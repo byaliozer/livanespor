@@ -492,6 +492,8 @@ async def admin_update_ai_settings(payload: AiSettingsIn, user=Depends(require_a
 # ─────────────────────────── Mackolik Sync ───────────────────────────
 import mackolik_sync
 import mackolik_scheduler
+import storage as object_storage
+import ai_media
 
 class MackolikSettingsIn(BaseModel):
     macko_team_id: str
@@ -634,6 +636,10 @@ async def admin_ai_generate(payload: AiGenerateIn, user=Depends(require_admin)):
     if s.get('enabled') is False:
         raise HTTPException(400, "AI görsel üretimi devre dışı")
 
+    # Credit metering
+    if not await consume_credit(1, note=f"AI prompt: {payload.prompt[:40]}"):
+        raise HTTPException(402, "Kredi yetersiz. PAKETİM ekranından paketinizi yükseltin.")
+
     size = ASPECT_TO_SIZE[payload.aspect_ratio]
     try:
         oclient = AsyncOpenAI(api_key=api_key)
@@ -661,6 +667,19 @@ async def admin_ai_generate(payload: AiGenerateIn, user=Depends(require_admin)):
         b64 = resp.data[0].b64_json
         if not b64:
             raise HTTPException(500, "Görsel üretilemedi")
+
+        # Upload to Object Storage for durable hosting
+        png_bytes = base64.b64decode(b64)
+        public_url = None
+        storage_path = None
+        try:
+            sp = object_storage.new_path("ai", "png")
+            result = await object_storage.put_bytes(sp, png_bytes, "image/png")
+            storage_path = result.get("path", sp)
+            public_url = f"/api/public/media/{storage_path}"
+        except Exception as se:
+            logging.warning(f"Object storage upload failed, falling back to base64: {se}")
+
         data_url = f"data:image/png;base64,{b64}"
 
         media_doc = None
@@ -673,11 +692,18 @@ async def admin_ai_generate(payload: AiGenerateIn, user=Depends(require_admin)):
                 'prompt': payload.prompt,
                 'aspect_ratio': payload.aspect_ratio,
                 'quality': payload.quality,
-                'data_url': data_url,
+                'storage_path': storage_path,
+                'public_url': public_url,
+                'data_url': None if public_url else data_url,  # only fallback if storage failed
+                'is_deleted': False,
             })
+            # Enforce 500-item archive cap (soft-delete oldest)
+            await _enforce_media_cap(500)
 
         return {
-            'data_url': data_url,
+            'data_url': data_url if not public_url else None,
+            'public_url': public_url,
+            'storage_path': storage_path,
             'model': model_used,
             'size': size,
             'media': media_doc,
@@ -687,6 +713,217 @@ async def admin_ai_generate(payload: AiGenerateIn, user=Depends(require_admin)):
     except Exception as e:
         logging.exception("AI image gen error")
         raise HTTPException(500, f"Görsel üretim hatası: {str(e)[:200]}")
+
+
+# ─────────────────────────── AI Templates (Phase 2) ───────────────────────────
+async def _enforce_media_cap(cap: int = 500):
+    """Soft-delete oldest media rows beyond `cap`, prioritising already ai-generated ones."""
+    total = await db.media.count_documents({'is_deleted': {'$ne': True}})
+    if total <= cap:
+        return
+    excess = total - cap
+    # Oldest first
+    oldest = await db.media.find({'is_deleted': {'$ne': True}}, {'_id': 0, 'id': 1}).sort('created_at', 1).limit(excess).to_list(excess)
+    ids = [r['id'] for r in oldest if r.get('id')]
+    if ids:
+        await db.media.update_many({'id': {'$in': ids}}, {'$set': {'is_deleted': True, 'deleted_at': now_iso(), 'deleted_reason': 'archive_cap'}})
+
+async def _resolve_template_ctx(template_key: str, payload: dict) -> dict:
+    """Expand ctx with DB lookups: player_id → full player doc; match_id → match doc."""
+    ctx = dict(payload)
+    # Player lookup
+    pid = ctx.pop('player_id', None)
+    if pid:
+        p = await db.players.find_one({'$or': [{'id': pid}, {'slug': pid}]}, {'_id': 0})
+        if p:
+            ctx['player'] = p
+    # Match lookup
+    mid = ctx.pop('match_id', None)
+    if mid:
+        m = await db.matches.find_one({'id': mid}, {'_id': 0})
+        if m:
+            ctx.setdefault('home_team', m.get('home_team'))
+            ctx.setdefault('away_team', m.get('away_team'))
+            ctx.setdefault('home_score', m.get('home_score'))
+            ctx.setdefault('away_score', m.get('away_score'))
+            ctx.setdefault('match_date', (m.get('match_date') or '')[:10])
+            ctx.setdefault('venue', m.get('venue'))
+            ctx.setdefault('competition', m.get('competition'))
+            ctx.setdefault('opponent', m.get('opponent'))
+    # Starting XI: list of player_ids → players
+    player_ids = ctx.pop('player_ids', None)
+    if player_ids:
+        rows = await db.players.find({'id': {'$in': player_ids}}, {'_id': 0}).to_list(20)
+        # Preserve input order
+        ordered = []
+        for pid_ in player_ids:
+            found = next((r for r in rows if r.get('id') == pid_), None)
+            if found:
+                ordered.append(found)
+        ctx['players'] = ordered
+    return ctx
+
+@api_router.get("/admin/ai/templates")
+async def admin_ai_templates(user=Depends(require_admin)):
+    return ai_media.list_templates()
+
+class AiTemplateIn(BaseModel):
+    template_key: str
+    context: Dict[str, Any] = {}
+    aspect_ratio: Optional[Literal["1:1", "16:9", "4:5", "9:16"]] = None
+    quality: Literal["low", "medium", "high"] = "high"
+    title: Optional[str] = None
+
+async def _run_ai_job(job_id: str):
+    """Background worker: pick up job, call gpt-image-2, store result. Race-safe (APScheduler one-shot)."""
+    job = await db.ai_media_jobs.find_one({'id': job_id}, {'_id': 0})
+    if not job:
+        logger.warning(f"AI job {job_id} vanished before worker pick-up")
+        return
+    # Idempotency: only run if status==pending
+    cur = await db.ai_media_jobs.find_one_and_update(
+        {'id': job_id, 'status': 'pending'},
+        {'$set': {'status': 'processing', 'started_at': now_iso()}},
+        return_document=True,
+    )
+    if not cur:
+        logger.info(f"AI job {job_id} already claimed; skipping")
+        return
+    try:
+        site = await db.site_settings.find_one({'id': 'main'}, {'_id': 0}) or {}
+        ctx = await _resolve_template_ctx(cur['template_key'], cur.get('context') or {})
+        prompt, default_title = ai_media.build_prompt(cur['template_key'], ctx, site)
+        tpl = ai_media.TEMPLATES[cur['template_key']]
+        aspect = cur.get('aspect_ratio') or tpl['aspect_ratio']
+        size = ASPECT_TO_SIZE[aspect]
+        ai_settings = await db.ai_settings.find_one({'id': 'main'}, {'_id': 0}) or {}
+        api_key = ai_settings.get('openai_api_key') or OPENAI_API_KEY
+        if not api_key:
+            raise RuntimeError("OpenAI key not configured")
+        oclient = AsyncOpenAI(api_key=api_key)
+        model_used = "gpt-image-2"
+        try:
+            resp = await oclient.images.generate(model="gpt-image-2", prompt=prompt, size=size, quality=cur.get('quality', 'high'), n=1)
+        except Exception as e1:
+            logger.warning(f"gpt-image-2 failed, fallback: {e1}")
+            resp = await oclient.images.generate(model="gpt-image-1", prompt=prompt, size=size, quality=cur.get('quality', 'high'), n=1)
+            model_used = "gpt-image-1"
+        b64 = resp.data[0].b64_json
+        if not b64:
+            raise RuntimeError("No image returned")
+        png = base64.b64decode(b64)
+        public_url = None
+        storage_path = None
+        try:
+            sp = object_storage.new_path("ai", "png")
+            r = await object_storage.put_bytes(sp, png, "image/png")
+            storage_path = r.get("path", sp)
+            public_url = f"/api/public/media/{storage_path}"
+        except Exception as se:
+            logger.warning(f"Storage upload failed: {se}")
+        media = await _create('media', {
+            'title': cur.get('title') or default_title,
+            'type': 'image',
+            'source': 'ai_template',
+            'template_key': cur['template_key'],
+            'model': model_used,
+            'prompt': prompt,
+            'aspect_ratio': aspect,
+            'quality': cur.get('quality', 'high'),
+            'storage_path': storage_path,
+            'public_url': public_url,
+            'data_url': None if public_url else f"data:image/png;base64,{b64}",
+            'is_deleted': False,
+        })
+        await _enforce_media_cap(500)
+        await db.ai_media_jobs.update_one({'id': job_id}, {'$set': {
+            'status': 'success',
+            'finished_at': now_iso(),
+            'media_id': media['id'],
+            'public_url': public_url,
+            'storage_path': storage_path,
+            'model': model_used,
+            'prompt': prompt,
+        }})
+    except Exception as e:
+        logger.exception(f"AI job {job_id} failed")
+        await db.ai_media_jobs.update_one({'id': job_id}, {'$set': {
+            'status': 'error',
+            'finished_at': now_iso(),
+            'error': str(e)[:500],
+        }})
+
+@api_router.post("/admin/ai/generate-template")
+async def admin_ai_generate_template(payload: AiTemplateIn, user=Depends(require_admin)):
+    if payload.template_key not in ai_media.TEMPLATES:
+        raise HTTPException(400, "Geçersiz şablon anahtarı")
+    # Credit check + consume up-front (refund on failure)
+    if not await consume_credit(1, note=f"AI template: {payload.template_key}"):
+        raise HTTPException(402, "Kredi yetersiz. PAKETİM ekranından paketinizi yükseltin.")
+    job = {
+        'id': new_id(),
+        'status': 'pending',
+        'template_key': payload.template_key,
+        'context': payload.context,
+        'aspect_ratio': payload.aspect_ratio,
+        'quality': payload.quality,
+        'title': payload.title,
+        'created_by': user.get('id'),
+        'created_at': now_iso(),
+    }
+    await db.ai_media_jobs.insert_one(dict(job))
+    job.pop('_id', None)
+    # Schedule one-shot background run via APScheduler (coroutine factory)
+    try:
+        mackolik_scheduler.schedule_once(lambda jid=job['id']: _run_ai_job(jid))
+    except Exception:
+        asyncio.create_task(_run_ai_job(job['id']))
+    return job
+
+@api_router.get("/admin/ai/jobs")
+async def admin_ai_jobs(limit: int = 30, user=Depends(require_admin)):
+    rows = await db.ai_media_jobs.find({}, {'_id': 0}).sort('created_at', -1).limit(limit).to_list(limit)
+    return rows
+
+@api_router.get("/admin/ai/jobs/{job_id}")
+async def admin_ai_job(job_id: str, user=Depends(require_admin)):
+    j = await db.ai_media_jobs.find_one({'id': job_id}, {'_id': 0})
+    if not j:
+        raise HTTPException(404, "İş bulunamadı")
+    return j
+
+# Archive list with filters
+@api_router.get("/admin/media-archive")
+async def admin_media_archive(source: Optional[str] = None, limit: int = 200, user=Depends(require_admin)):
+    q: Dict[str, Any] = {'is_deleted': {'$ne': True}}
+    if source:
+        q['source'] = source
+    rows = await db.media.find(q, {'_id': 0}).sort('created_at', -1).limit(min(limit, 500)).to_list(min(limit, 500))
+    return rows
+
+class MediaDeleteIn(BaseModel):
+    id: str
+
+@api_router.post("/admin/media/soft-delete")
+async def admin_media_soft_delete(payload: MediaDeleteIn, user=Depends(require_admin)):
+    res = await db.media.update_one({'id': payload.id}, {'$set': {'is_deleted': True, 'deleted_at': now_iso()}})
+    if not res.matched_count:
+        raise HTTPException(404, "Medya bulunamadı")
+    return {'ok': True}
+
+# Public media proxy (no auth) — so <img src> works directly
+from fastapi.responses import Response
+
+@api_router.get("/public/media/{path:path}")
+async def public_media(path: str):
+    m = await db.media.find_one({'storage_path': path, 'is_deleted': {'$ne': True}}, {'_id': 0})
+    if not m:
+        raise HTTPException(404, "Görsel bulunamadı")
+    try:
+        data, ctype = await object_storage.get_bytes(path)
+    except Exception as e:
+        raise HTTPException(502, f"Depolama hatası: {e}")
+    return Response(content=data, media_type=ctype or "image/png", headers={"Cache-Control": "public, max-age=86400"})
 
 # Media library — accept base64 uploads from frontend
 class MediaUploadIn(BaseModel):
@@ -1270,6 +1507,11 @@ async def startup_event():
         await mackolik_scheduler.reschedule_from_db()
     except Exception as e:
         logger.warning(f"Mackolik scheduler init warning: {e}")
+    # Object storage init (Phase 3)
+    try:
+        await object_storage.init_storage()
+    except Exception as e:
+        logger.warning(f"Object storage init warning: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

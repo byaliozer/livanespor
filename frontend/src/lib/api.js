@@ -110,4 +110,12 @@ export const adminApi = {
     adjustCredits: (amount, note) => api.post("/admin/subscription/credit-adjust", { amount, note }).then((r) => r.data),
     // Dashboard birthdays
     birthdays: (days = 30) => api.get("/admin/dashboard/birthdays", { params: { days } }).then((r) => r.data),
+    // AI templates (Phase 2)
+    aiTemplates: () => api.get("/admin/ai/templates").then((r) => r.data),
+    aiGenerateTemplate: (data) => api.post("/admin/ai/generate-template", data).then((r) => r.data),
+    aiJobs: (limit = 30) => api.get("/admin/ai/jobs", { params: { limit } }).then((r) => r.data),
+    aiJob: (jobId) => api.get(`/admin/ai/jobs/${jobId}`).then((r) => r.data),
+    // Media archive (Phase 3)
+    mediaArchive: (source, limit = 200) => api.get("/admin/media-archive", { params: { source, limit } }).then((r) => r.data),
+    mediaSoftDelete: (id) => api.post("/admin/media/soft-delete", { id }).then((r) => r.data),
 };

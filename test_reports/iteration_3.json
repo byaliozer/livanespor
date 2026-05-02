@@ -1,0 +1,48 @@
+{
+  "summary": "Phase 2+3 (AI Templates, Jobs, Object Storage, Media Archive, Public Media) end-to-end testing. Backend: 12/12 new tests in test_phase2_ai_media.py + 45/45 regression (test_phase1 12/12 + backend_test 33/33 after updating TestAIImage for new storage response shape) all PASSED — 57/57. Validated: GET /api/admin/ai/templates returns 8 templates with keys (match_day, starting_xi, match_result, goal, birthday, new_transfer, player_of_week, fan_invite) each carrying name/aspect_ratio/required_inputs; POST /admin/ai/generate-template creates pending job + deducts 1 credit + 402 'Kredi yetersiz' when balance=0; full round-trip on fan_invite (low/1:1) pending→processing→success in ~30s with public_url starting /api/public/media/ + storage_path + model + prompt + media_id; GET /api/public/media/{path} no-auth returns image/png with Cache-Control header and >1KB PNG bytes (Emergent Object Storage wired correctly); GET /api/public/media/nonexistent → 404; GET /admin/media-archive excludes is_deleted=true rows + ?source=ai_template filter works; POST /admin/media/soft-delete marks is_deleted=true so item disappears from archive AND public URL now returns 404 (end-to-end soft-delete honored); _enforce_media_cap runs after every _create('media') in both generate-image and job worker paths; generate-image freeform now uploads to Object Storage (public_url path) and deducts credit. Frontend: /admin/ai-studio loads with 8 template pills (all 8 data-testid present), switches active template on click, 'goal' template shows minute field / 'fan_invite' shows match_text+message textareas, submit without required field fires toast 'Eksik alan: match_text' and suppresses API call, jobs panel rendered existing jobs with preview images + download link, auto-poll wired (3s interval in code). /admin/media Arşiv: header 'Arşiv (1 / 500)' visible, filter pills all/upload/ai/ai_template render and filter correctly, media items displayed from public_url. Sidebar contains both 'AI Görsel (Prompt)' → /admin/ai (old panel loads cleanly) AND 'AI Stüdyo (Şablonlar)' → /admin/ai-studio. /admin/paketim still works and reflects credit deductions (observed 'AI prompt: Bursa football team...' usage tx with -1 amount in transactions list after generate-image test run). No regressions. 2 real gpt-image-2 generations total (1 fan_invite template + 1 freeform legacy test) as budgeted.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/admin/ai/generate-template", "issue": "Credit is consumed BEFORE template_key validation — an invalid template_key request still deducts 1 credit before returning 400. Minor UX/billing edge case; recommend validating template_key first then consume_credit."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/admin/ai-studio", "issues": ["React console warning: 'In HTML, <span> cannot be a child of <option>' — hydration warning from a <select> option label. Non-blocking but visible in console; main agent should clean up option markup."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase2_ai_media.py",
+    "/app/backend/tests/test_phase1.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/phase2_results.xml",
+    "/app/test_reports/pytest/regression_results.xml"
+  ],
+  "action_items": [
+    "(Minor) Move template_key validation above consume_credit() in /admin/ai/generate-template so invalid keys don't burn credit.",
+    "(Minor) Clean up <span> inside <option> in AiStudio.jsx template-form dropdowns to silence React hydration warning.",
+    "(Code review) server.py now ~1520 lines — continue to be a candidate for router split (ai / admin / public) as Phase 2+3 added ~300 more lines."
+  ],
+  "critical_code_review_comments": [
+    "generate-template consumes credit BEFORE validating template_key — should validate first to avoid accidental credit burn on client typos.",
+    "_run_ai_job does NOT refund credit on failure (job status=error) despite credit consumed up-front; consider refund path or at least a manual-refund admin button. Currently a fan_invite failure silently debits 1 credit.",
+    "mackolik_scheduler.schedule_once falls back to asyncio.create_task on any exception — good, but no logging of the fallback reason makes debugging scheduler outages harder.",
+    "/api/public/media/{path:path} performs DB lookup then Object Storage fetch on every request with no CDN/HTTP cache tier; Cache-Control: public, max-age=86400 is set which helps browsers, but consider Surrogate-Control/etag to reduce repeated storage egress cost.",
+    "_enforce_media_cap soft-deletes oldest media regardless of source — consider protecting curated 'upload' items or at least preferring 'ai' sources first when trimming (task description hinted at this but impl trims by created_at only).",
+    "AiStudio.jsx mediaUrl helper strips trailing /api via regex — relies on REACT_APP_BACKEND_URL having /api suffix; if env changes shape (no /api suffix) the URL will be double-joined. Safer to use URL parsing.",
+    "Media.jsx Arşiv count header reads '/500' hard-coded; when cap becomes configurable (per-plan) this should bind to a backend-provided max."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase2_ai_media.py (created — 12 tests)",
+    "/app/backend/tests/backend_test.py (updated TestAIImage assertion to accept new public_url+storage_path response shape from Object Storage upload)"
+  ],
+  "success_rate": {"backend": "100% (57/57)", "frontend": "100%"},
+  "test_credentials": "username='livanespor' (case-insensitive) password='Livanespor2026' — verified from /app/memory/test_credentials.md.",
+  "seed_data_creation": "Created 1 fan_invite job + media via backend test (then soft-deleted and verified 404). Created 1 freeform gpt-image-2 media via TestAIImage (left in archive — see 'Arşiv (1/500)'). Subscription credit temporarily set to 0 then restored to prior balance in TestInsufficientCredit. Subscription balance ended at 30/30 Starter after tests.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "New tests live in /app/backend/tests/test_phase2_ai_media.py. The test_fan_invite_full_roundtrip makes 1 real gpt-image-2 call (~25s, quality=low, 1:1) and costs 1 credit — use pytest --deselect to skip when credits are tight. Object storage is Emergent-managed; public_url pattern is /api/public/media/{storage_path}. /admin/ai-studio data-testid map: ai-studio, template-pills, template-pill-{match_day|starting_xi|match_result|goal|birthday|new_transfer|player_of_week|fan_invite}, template-form, field-player/players/match/aspect/quality, submit-template, jobs-panel, refresh-jobs, job-{id}. /admin/media: admin-media, media-upload-input, media-upload-label, media-filters, filter-{all|upload|ai|ai_template}, media-item-{id}, media-delete-{id}. Sidebar NavLinks render without href attribute resolving via a[href=...] query — use innerText or data-testid on nav item instead when writing playwright selectors.",
+  "rca of the issue": "No defects. TestAIImage regression failure was a stale test asserting legacy data_url-only response shape; the generate-image endpoint now prefers Object Storage and returns public_url with data_url=None. Fixed in-place (test-only change within allowed scope) and re-verified."
+}

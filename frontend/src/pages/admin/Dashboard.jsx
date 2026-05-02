@@ -39,7 +39,7 @@ const AdminDashboard = () => {
                 <div className="flex flex-wrap gap-2">
                     <QuickAction icon={Plus} label="Haber Ekle" to="/admin/posts" />
                     <QuickAction icon={Plus} label="Oyuncu Ekle" to="/admin/players" variant="secondary" />
-                    <QuickAction icon={Wand2} label="AI Görsel Üret" to="/admin/ai" variant="secondary" />
+                    <QuickAction icon={Wand2} label="AI Stüdyo" to="/admin/ai-studio" variant="secondary" />
                     <QuickAction icon={RefreshCw} label="Mackolik Sync" to="/admin/mackolik" variant="secondary" />
                     <QuickAction icon={Package} label="Paketim" to="/admin/paketim" variant="secondary" />
                 </div>

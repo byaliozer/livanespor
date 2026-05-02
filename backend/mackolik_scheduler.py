@@ -137,3 +137,30 @@ def get_next_run_iso() -> Optional[str]:
     if not job or not job.next_run_time:
         return None
     return job.next_run_time.isoformat()
+
+
+def schedule_once(coro_factory, delay_seconds: int = 0):
+    """Schedule a coroutine-factory (callable returning a coroutine) as one-shot.
+    AsyncIOScheduler's default executor runs sync callables in a thread; we route
+    through the main loop via run_coroutine_threadsafe.
+    """
+    import asyncio
+    if _scheduler is None:
+        # No scheduler — best effort: start a task on the current running loop.
+        try:
+            loop = asyncio.get_event_loop()
+            loop.create_task(coro_factory())
+        except Exception as e:
+            logger.warning(f"schedule_once fallback failed: {e}")
+        return
+    from datetime import datetime, timezone, timedelta
+    run_at = datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)
+    loop = asyncio.get_event_loop()
+
+    def _runner():
+        try:
+            asyncio.run_coroutine_threadsafe(coro_factory(), loop)
+        except Exception as e:
+            logger.exception(f"schedule_once runner error: {e}")
+
+    _scheduler.add_job(_runner, 'date', run_date=run_at)
