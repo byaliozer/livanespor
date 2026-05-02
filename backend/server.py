@@ -18,6 +18,7 @@ import bcrypt
 import jwt as pyjwt
 import base64
 import asyncio
+import httpx
 from slugify import slugify
 from openai import AsyncOpenAI
 
@@ -275,6 +276,7 @@ COLLECTIONS = {
     'contact_messages': {'public': False, 'slug_field': None},
     'media': {'public': False, 'slug_field': None},
     'hero_slides': {'public': True, 'slug_field': None},
+    'team_photos': {'public': False, 'slug_field': None},
 }
 
 async def _list(coll: str, public_only: bool = False, filters: Optional[dict] = None, sort_field: str = 'created_at', sort_dir: int = -1, limit: int = 500):
@@ -455,11 +457,48 @@ async def admin_get_settings(user=Depends(require_admin)):
 @api_router.put("/admin/site-settings")
 async def admin_update_settings(payload: GenericIn, user=Depends(require_admin)):
     data = payload.model_dump()
+    # Validate color hex fields (#RRGGBB)
+    import re
+    hex_re = re.compile(r'^#[0-9a-fA-F]{6}$')
+    for fld in ('primary_color', 'secondary_color', 'bg_color'):
+        v = data.get(fld)
+        if v not in (None, '') and not hex_re.match(v):
+            raise HTTPException(400, f"Geçersiz renk: '{fld}' '#RRGGBB' biçiminde olmalı (örn. #f5dc4c)")
+    # Validate theme enum
+    theme = data.get('default_theme')
+    if theme not in (None, '') and theme not in ('dark', 'light'):
+        raise HTTPException(400, "default_theme 'dark' veya 'light' olmalı")
     data['id'] = 'main'
     data['updated_at'] = now_iso()
     await db.site_settings.update_one({'id': 'main'}, {'$set': data}, upsert=True)
     s = await db.site_settings.find_one({'id': 'main'}, {'_id': 0})
     return s
+
+@api_router.get("/public/theme.css")
+async def public_theme_css():
+    """CSS variables reflecting site theme. Public, no auth. Frontend injects this."""
+    s = await db.site_settings.find_one({'id': 'main'}, {'_id': 0}) or {}
+    primary = s.get('primary_color') or '#f5dc4c'
+    secondary = s.get('secondary_color') or '#ffffff'
+    bg = s.get('bg_color') or '#0b0b0b'
+    theme = s.get('default_theme') or 'dark'
+    body_bg = bg if theme == 'dark' else '#ffffff'
+    body_fg = '#ffffff' if theme == 'dark' else '#0b0b0b'
+    css = f""":root {{
+  --liv-primary: {primary};
+  --liv-secondary: {secondary};
+  --liv-bg: {bg};
+  --liv-body-bg: {body_bg};
+  --liv-body-fg: {body_fg};
+  --liv-theme: "{theme}";
+}}
+.liv-theme-apply {{
+  --tw-gradient-from: {primary};
+  --tw-gradient-to: {secondary};
+}}
+"""
+    from fastapi.responses import Response
+    return Response(content=css, media_type="text/css", headers={"Cache-Control": "public, max-age=300"})
 
 # ─────────────────────────── AI Settings & Generation ───────────────────────────
 @api_router.get("/admin/ai-settings")
@@ -697,8 +736,7 @@ async def admin_ai_generate(payload: AiGenerateIn, user=Depends(require_admin)):
                 'data_url': None if public_url else data_url,  # only fallback if storage failed
                 'is_deleted': False,
             })
-            # Enforce 500-item archive cap (soft-delete oldest)
-            await _enforce_media_cap(500)
+            await _enforce_media_cap(await _current_media_cap())
 
         return {
             'data_url': data_url if not public_url else None,
@@ -717,16 +755,41 @@ async def admin_ai_generate(payload: AiGenerateIn, user=Depends(require_admin)):
 
 # ─────────────────────────── AI Templates (Phase 2) ───────────────────────────
 async def _enforce_media_cap(cap: int = 500):
-    """Soft-delete oldest media rows beyond `cap`, prioritising already ai-generated ones."""
+    """Soft-delete oldest media rows beyond `cap`, PROTECTING manual uploads —
+    trim AI-generated items (source in {ai, ai_template}) first; only then uploads."""
     total = await db.media.count_documents({'is_deleted': {'$ne': True}})
     if total <= cap:
         return
     excess = total - cap
-    # Oldest first
-    oldest = await db.media.find({'is_deleted': {'$ne': True}}, {'_id': 0, 'id': 1}).sort('created_at', 1).limit(excess).to_list(excess)
-    ids = [r['id'] for r in oldest if r.get('id')]
+    # First pass — AI-generated
+    ai_oldest = await db.media.find(
+        {'is_deleted': {'$ne': True}, 'source': {'$in': ['ai', 'ai_template']}},
+        {'_id': 0, 'id': 1}
+    ).sort('created_at', 1).limit(excess).to_list(excess)
+    ids = [r['id'] for r in ai_oldest if r.get('id')]
     if ids:
         await db.media.update_many({'id': {'$in': ids}}, {'$set': {'is_deleted': True, 'deleted_at': now_iso(), 'deleted_reason': 'archive_cap'}})
+        excess -= len(ids)
+    # Second pass — uploads (only if AI pool wasn't enough)
+    if excess > 0:
+        up_oldest = await db.media.find(
+            {'is_deleted': {'$ne': True}},
+            {'_id': 0, 'id': 1}
+        ).sort('created_at', 1).limit(excess).to_list(excess)
+        ids2 = [r['id'] for r in up_oldest if r.get('id')]
+        if ids2:
+            await db.media.update_many({'id': {'$in': ids2}}, {'$set': {'is_deleted': True, 'deleted_at': now_iso(), 'deleted_reason': 'archive_cap'}})
+
+
+PLAN_MEDIA_CAP = {'starter': 100, 'plus': 500, 'pro': 2000}
+
+async def _current_media_cap() -> int:
+    """Cap based on active subscription plan."""
+    try:
+        doc = await _ensure_subscription_doc()
+        return PLAN_MEDIA_CAP.get(doc.get('plan_name', 'starter'), 500)
+    except Exception:
+        return 500
 
 async def _resolve_template_ctx(template_key: str, payload: dict) -> dict:
     """Expand ctx with DB lookups: player_id → full player doc; match_id → match doc."""
@@ -767,32 +830,66 @@ async def _resolve_template_ctx(template_key: str, payload: dict) -> dict:
 async def admin_ai_templates(user=Depends(require_admin)):
     return ai_media.list_templates()
 
+@api_router.get("/admin/ai/design-options")
+async def admin_ai_design_options(user=Depends(require_admin)):
+    """Return available DNA catalog options for the Özelleştir UI."""
+    return {
+        "layouts": [{"key": k, "label": k.replace("_", " ").title()} for k in ai_media.LAYOUT_RECIPES.keys()],
+        "scenes": [{"key": k, "label": k.replace("_", " ").title()} for k in ai_media.SCENE_DESCRIPTIONS.keys()],
+        "typographies": [{"key": k, "label": k.replace("_", " ").title()} for k in ai_media.TYPOGRAPHY_DESCRIPTIONS.keys()],
+        "drama_levels": [{"value": i, "label": ["", "Minimal", "Dengeli", "Yüksek"][i]} for i in [1, 2, 3]],
+    }
+
 class AiTemplateIn(BaseModel):
     template_key: str
     context: Dict[str, Any] = {}
     aspect_ratio: Optional[Literal["1:1", "16:9", "4:5", "9:16"]] = None
     quality: Literal["low", "medium", "high"] = "high"
     title: Optional[str] = None
+    # Design customization (DR AI "Özelleştir" toggle)
+    custom_design: bool = False
+    custom_layout: Optional[str] = None
+    custom_typography: Optional[str] = None
+    custom_scene: Optional[str] = None
+    custom_drama: Optional[int] = None
+    custom_show_city: bool = False
+    custom_show_year: bool = False
+    # Reference images (stored base64 data urls OR storage paths)
+    reference_images: List[str] = []  # list of data urls or /api/public/media/... paths
+    # Variation count
+    variation_count: Literal[1, 3] = 1
 
 async def _run_ai_job(job_id: str):
-    """Background worker: pick up job, call gpt-image-2, store result. Race-safe (APScheduler one-shot)."""
+    """Background worker: coroutine-safe on AsyncIOScheduler."""
     job = await db.ai_media_jobs.find_one({'id': job_id}, {'_id': 0})
     if not job:
-        logger.warning(f"AI job {job_id} vanished before worker pick-up")
         return
-    # Idempotency: only run if status==pending
     cur = await db.ai_media_jobs.find_one_and_update(
         {'id': job_id, 'status': 'pending'},
         {'$set': {'status': 'processing', 'started_at': now_iso()}},
         return_document=True,
     )
     if not cur:
-        logger.info(f"AI job {job_id} already claimed; skipping")
         return
     try:
         site = await db.site_settings.find_one({'id': 'main'}, {'_id': 0}) or {}
         ctx = await _resolve_template_ctx(cur['template_key'], cur.get('context') or {})
-        prompt, default_title = ai_media.build_prompt(cur['template_key'], ctx, site)
+        # Resolve design DNA with variation_index for this sub-job
+        variation_index = int(cur.get('variation_index', 0))
+        design = ai_media.resolve_design(
+            club_id=site.get('short_name') or site.get('site_title') or 'main',
+            variation_index=variation_index,
+            custom_layout=cur.get('custom_layout') if cur.get('custom_design') else None,
+            custom_typography=cur.get('custom_typography') if cur.get('custom_design') else None,
+            custom_scene=cur.get('custom_scene') if cur.get('custom_design') else None,
+            custom_drama=cur.get('custom_drama') if cur.get('custom_design') else None,
+            custom_variation_diverse=True,
+            custom_show_city=bool(cur.get('custom_show_city')),
+            custom_show_year=bool(cur.get('custom_show_year')),
+            city_name=site.get('city') or '',
+            founded_year=site.get('founded_year'),
+        )
+        prompt, default_title = ai_media.build_prompt(cur['template_key'], ctx, site, design)
         tpl = ai_media.TEMPLATES[cur['template_key']]
         aspect = cur.get('aspect_ratio') or tpl['aspect_ratio']
         size = ASPECT_TO_SIZE[aspect]
@@ -800,20 +897,69 @@ async def _run_ai_job(job_id: str):
         api_key = ai_settings.get('openai_api_key') or OPENAI_API_KEY
         if not api_key:
             raise RuntimeError("OpenAI key not configured")
-        oclient = AsyncOpenAI(api_key=api_key)
+        oclient = AsyncOpenAI(api_key=api_key, timeout=420.0)
+
+        # Reference image handling: fetch bytes from data urls or /api/public/media/... paths
+        ref_images_raw: List[str] = cur.get('reference_images') or []
+        ref_bytes: List[bytes] = []
+        for ref in ref_images_raw:
+            try:
+                if ref.startswith('data:image'):
+                    _, b64part = ref.split(',', 1)
+                    ref_bytes.append(base64.b64decode(b64part))
+                elif ref.startswith('/api/public/media/'):
+                    storage_path = ref.replace('/api/public/media/', '', 1)
+                    data, _ = await object_storage.get_bytes(storage_path)
+                    ref_bytes.append(data)
+                elif ref.startswith('http'):
+                    async with httpx.AsyncClient(timeout=30) as hc:
+                        r = await hc.get(ref)
+                        r.raise_for_status()
+                        ref_bytes.append(r.content)
+            except Exception as re:
+                logger.warning(f"Skipping bad reference image: {re}")
+
         model_used = "gpt-image-2"
-        try:
-            resp = await oclient.images.generate(model="gpt-image-2", prompt=prompt, size=size, quality=cur.get('quality', 'high'), n=1)
-        except Exception as e1:
-            logger.warning(f"gpt-image-2 failed, fallback: {e1}")
-            resp = await oclient.images.generate(model="gpt-image-1", prompt=prompt, size=size, quality=cur.get('quality', 'high'), n=1)
-            model_used = "gpt-image-1"
+        if ref_bytes:
+            # Use images.edit with reference images
+            import io
+            files = []
+            for idx, data in enumerate(ref_bytes):
+                bio = io.BytesIO(data); bio.name = f"ref_{idx}.png"
+                files.append(bio)
+            try:
+                resp = await oclient.images.edit(
+                    model="gpt-image-2",
+                    image=files if len(files) > 1 else files[0],
+                    prompt=prompt, size=size, quality=cur.get('quality', 'high'), n=1,
+                )
+            except Exception as e1:
+                logger.warning(f"gpt-image-2 edit failed, fallback to 1.5: {e1}")
+                # Rebuild file handles (BytesIO consumed)
+                files = []
+                for idx, data in enumerate(ref_bytes):
+                    bio = io.BytesIO(data); bio.name = f"ref_{idx}.png"
+                    files.append(bio)
+                resp = await oclient.images.edit(
+                    model="gpt-image-1.5",
+                    image=files if len(files) > 1 else files[0],
+                    prompt=prompt, size=size, quality=cur.get('quality', 'high'),
+                    input_fidelity='high', n=1,
+                )
+                model_used = "gpt-image-1.5"
+        else:
+            try:
+                resp = await oclient.images.generate(model="gpt-image-2", prompt=prompt, size=size, quality=cur.get('quality', 'high'), n=1)
+            except Exception as e1:
+                logger.warning(f"gpt-image-2 generate failed, fallback: {e1}")
+                resp = await oclient.images.generate(model="gpt-image-1.5", prompt=prompt, size=size, quality=cur.get('quality', 'high'), n=1)
+                model_used = "gpt-image-1.5"
+
         b64 = resp.data[0].b64_json
         if not b64:
             raise RuntimeError("No image returned")
         png = base64.b64decode(b64)
-        public_url = None
-        storage_path = None
+        public_url = None; storage_path = None
         try:
             sp = object_storage.new_path("ai", "png")
             r = await object_storage.put_bytes(sp, png, "image/png")
@@ -823,62 +969,88 @@ async def _run_ai_job(job_id: str):
             logger.warning(f"Storage upload failed: {se}")
         media = await _create('media', {
             'title': cur.get('title') or default_title,
-            'type': 'image',
-            'source': 'ai_template',
+            'type': 'image', 'source': 'ai_template',
             'template_key': cur['template_key'],
-            'model': model_used,
-            'prompt': prompt,
-            'aspect_ratio': aspect,
-            'quality': cur.get('quality', 'high'),
-            'storage_path': storage_path,
-            'public_url': public_url,
+            'design': {'layout': design['layout_key'], 'scene': design['scene_key'],
+                       'typography': design['typography_key'], 'drama': design['drama']},
+            'variation_index': variation_index,
+            'model': model_used, 'prompt': prompt,
+            'aspect_ratio': aspect, 'quality': cur.get('quality', 'high'),
+            'storage_path': storage_path, 'public_url': public_url,
             'data_url': None if public_url else f"data:image/png;base64,{b64}",
             'is_deleted': False,
         })
-        await _enforce_media_cap(500)
+        await _enforce_media_cap(await _current_media_cap())
         await db.ai_media_jobs.update_one({'id': job_id}, {'$set': {
-            'status': 'success',
-            'finished_at': now_iso(),
-            'media_id': media['id'],
-            'public_url': public_url,
-            'storage_path': storage_path,
-            'model': model_used,
-            'prompt': prompt,
+            'status': 'success', 'finished_at': now_iso(),
+            'media_id': media['id'], 'public_url': public_url,
+            'storage_path': storage_path, 'model': model_used, 'prompt': prompt,
+            'design': {'layout': design['layout_key'], 'scene': design['scene_key'],
+                       'typography': design['typography_key'], 'drama': design['drama']},
         }})
     except Exception as e:
         logger.exception(f"AI job {job_id} failed")
+        # Refund the 1 credit debited up-front
+        try:
+            doc = await _ensure_subscription_doc()
+            new_bal = int(doc.get('credit_balance', 0)) + 1
+            await db.subscriptions.update_one(
+                {'id': 'main'},
+                {'$set': {'credit_balance': new_bal, 'updated_at': now_iso()},
+                 '$push': {'transactions': {
+                     'type': 'refund', 'amount': 1, 'balance_after': new_bal,
+                     'at': now_iso(), 'note': f"İade: AI job hatası ({job_id[:8]})",
+                 }}},
+            )
+        except Exception as re:
+            logger.warning(f"Refund failed: {re}")
         await db.ai_media_jobs.update_one({'id': job_id}, {'$set': {
-            'status': 'error',
-            'finished_at': now_iso(),
-            'error': str(e)[:500],
+            'status': 'error', 'finished_at': now_iso(),
+            'error': str(e)[:500], 'refunded': True,
         }})
 
 @api_router.post("/admin/ai/generate-template")
 async def admin_ai_generate_template(payload: AiTemplateIn, user=Depends(require_admin)):
     if payload.template_key not in ai_media.TEMPLATES:
         raise HTTPException(400, "Geçersiz şablon anahtarı")
-    # Credit check + consume up-front (only after template key validated)
-    if not await consume_credit(1, note=f"AI template: {payload.template_key}"):
-        raise HTTPException(402, "Kredi yetersiz. PAKETİM ekranından paketinizi yükseltin.")
-    job = {
-        'id': new_id(),
+    n = int(payload.variation_count or 1)
+    # Consume n credits up-front (1 per variation); failures refund per-job.
+    for _ in range(n):
+        if not await consume_credit(1, note=f"AI template: {payload.template_key}"):
+            raise HTTPException(402, "Kredi yetersiz. PAKETİM ekranından paketinizi yükseltin.")
+    batch_id = new_id()
+    jobs = []
+    base_doc = {
+        'batch_id': batch_id,
         'status': 'pending',
         'template_key': payload.template_key,
         'context': payload.context,
         'aspect_ratio': payload.aspect_ratio,
         'quality': payload.quality,
         'title': payload.title,
+        'custom_design': payload.custom_design,
+        'custom_layout': payload.custom_layout,
+        'custom_typography': payload.custom_typography,
+        'custom_scene': payload.custom_scene,
+        'custom_drama': payload.custom_drama,
+        'custom_show_city': payload.custom_show_city,
+        'custom_show_year': payload.custom_show_year,
+        'reference_images': payload.reference_images,
         'created_by': user.get('id'),
         'created_at': now_iso(),
     }
-    await db.ai_media_jobs.insert_one(dict(job))
-    job.pop('_id', None)
-    # Schedule one-shot background run via APScheduler (coroutine factory)
-    try:
-        mackolik_scheduler.schedule_once(lambda jid=job['id']: _run_ai_job(jid))
-    except Exception:
-        asyncio.create_task(_run_ai_job(job['id']))
-    return job
+    for idx in range(n):
+        job = dict(base_doc)
+        job['id'] = new_id()
+        job['variation_index'] = idx
+        await db.ai_media_jobs.insert_one(dict(job))
+        job.pop('_id', None)
+        jobs.append(job)
+        try:
+            mackolik_scheduler.schedule_once(lambda jid=job['id']: _run_ai_job(jid))
+        except Exception:
+            asyncio.create_task(_run_ai_job(job['id']))
+    return {'batch_id': batch_id, 'jobs': jobs, 'variation_count': n}
 
 @api_router.get("/admin/ai/jobs")
 async def admin_ai_jobs(limit: int = 30, user=Depends(require_admin)):
@@ -952,13 +1124,17 @@ def _current_year_month() -> str:
     return f"{dt.year:04d}-{dt.month:02d}"
 
 async def _ensure_subscription_doc() -> dict:
-    """Get or create the default subscription doc (id=main). Auto-resets monthly credits."""
+    """Get or create the default subscription doc (id=main, club_id=main).
+    The club_id field is foundation for multi-tenant rollout (currently singleton).
+    Auto-resets monthly credits.
+    """
     doc = await db.subscriptions.find_one({'id': 'main'}, {'_id': 0})
     now_ym = _current_year_month()
     if not doc:
         defaults = PLAN_LIMITS['starter']
         doc = {
             'id': 'main',
+            'club_id': 'main',
             'plan_name': 'starter',
             'plan_display_name': defaults['display_name'],
             'monthly_credit_limit': defaults['monthly_credit_limit'],
@@ -971,6 +1147,10 @@ async def _ensure_subscription_doc() -> dict:
         }
         await db.subscriptions.insert_one(dict(doc))
         doc.pop('_id', None)
+    # Backfill club_id if missing on legacy docs
+    if not doc.get('club_id'):
+        await db.subscriptions.update_one({'id': 'main'}, {'$set': {'club_id': 'main'}})
+        doc['club_id'] = 'main'
     # Monthly auto-reset
     if doc.get('last_reset_year_month') != now_ym:
         limit = doc.get('monthly_credit_limit', 30)

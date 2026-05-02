@@ -1,33 +1,141 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { adminApi, API, getToken } from "@/lib/api";
-import { Wand2, Loader2, Download, RefreshCw, Image as ImageIcon, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { adminApi, API } from "@/lib/api";
+import {
+    Wand2, Loader2, Download, RefreshCw, CheckCircle2, XCircle, Clock,
+    Sparkles, Paintbrush, Upload, X, Image as ImageIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 
-// Map URL helper — public media proxy returns bytes; we also send auth for consistency
-const mediaUrl = (m) => {
-    if (m?.public_url) {
-        // public endpoint is open, but dev cache-buster
-        return `${API.replace(/\/api$/, "")}${m.public_url}`;
-    }
-    return m?.data_url || "";
+// URL helper for public media proxy
+const mediaAbsUrl = (pathOrDataUrl) => {
+    if (!pathOrDataUrl) return "";
+    if (pathOrDataUrl.startsWith("data:") || pathOrDataUrl.startsWith("http")) return pathOrDataUrl;
+    try {
+        const origin = new URL(API).origin;
+        return `${origin}${pathOrDataUrl}`;
+    } catch { return pathOrDataUrl; }
 };
 
-const JobStatusIcon = ({ status }) => {
+const StatusIcon = ({ status }) => {
     if (status === "success") return <CheckCircle2 className="w-4 h-4 text-green-400" />;
     if (status === "error") return <XCircle className="w-4 h-4 text-red-400" />;
     if (status === "processing") return <Loader2 className="w-4 h-4 animate-spin text-liv-yellow" />;
     return <Clock className="w-4 h-4 text-neutral-400" />;
 };
 
+// File → data URL (max 5MB)
+const fileToDataUrl = (file) => new Promise((resolve, reject) => {
+    if (file.size > 5 * 1024 * 1024) return reject(new Error("Dosya 5MB'tan büyük olamaz"));
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+});
+
+const RefImageSlot = ({ label, value, onChange, testid }) => {
+    const pick = async (e) => {
+        const f = e.target.files?.[0]; if (!f) return;
+        try { onChange(await fileToDataUrl(f)); }
+        catch (err) { toast.error(err.message); }
+    };
+    return (
+        <div className="border border-liv-border bg-liv-surface p-2" data-testid={`ref-${testid}`}>
+            <div className="text-[10px] uppercase tracking-widest text-neutral-400 mb-1">{label}</div>
+            {value ? (
+                <div className="relative">
+                    <img src={value} alt={label} className="w-full h-24 object-contain bg-black" />
+                    <button onClick={() => onChange(null)} className="absolute top-1 right-1 w-5 h-5 bg-red-600 flex items-center justify-center"><X className="w-3 h-3" /></button>
+                </div>
+            ) : (
+                <label className="cursor-pointer h-24 flex items-center justify-center border-2 border-dashed border-liv-border hover:border-liv-yellow">
+                    <Upload className="w-4 h-4 text-neutral-500" />
+                    <input type="file" accept="image/*" onChange={pick} className="hidden" data-testid={`ref-${testid}-input`} />
+                </label>
+            )}
+        </div>
+    );
+};
+
+const DesignCustomizer = ({ options, custom, setCustom, values, setValues }) => (
+    <div className="border border-liv-border bg-liv-surface p-4 space-y-3" data-testid="design-customizer">
+        <div className="text-xs uppercase tracking-widest text-neutral-400">Görseli özelleştirmek ister misin?</div>
+        <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => setCustom(false)} data-testid="design-mode-akilli"
+                className={`py-2.5 text-xs font-semibold border ${!custom ? "bg-liv-yellow text-black border-liv-yellow" : "bg-liv-card border-liv-border text-neutral-300"}`}>
+                <div className="inline-flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5" /> Akıllı Seçim</div>
+                <div className="text-[10px] opacity-70 font-normal mt-0.5">(varsayılan · DNA)</div>
+            </button>
+            <button onClick={() => setCustom(true)} data-testid="design-mode-ozellestir"
+                className={`py-2.5 text-xs font-semibold border ${custom ? "bg-liv-yellow text-black border-liv-yellow" : "bg-liv-card border-liv-border text-neutral-300"}`}>
+                <div className="inline-flex items-center gap-1.5"><Paintbrush className="w-3.5 h-3.5" /> Özelleştir</div>
+                <div className="text-[10px] opacity-70 font-normal mt-0.5">(manuel kontrol)</div>
+            </button>
+        </div>
+        {!custom ? (
+            <p className="text-[11px] text-neutral-500">AI, kulübünün DNA'sına göre en iyi kombinasyonu seçer. Her kulüp benzersiz — Canva hissi yok.</p>
+        ) : (
+            <div className="space-y-3 pt-2 border-t border-liv-border">
+                <div>
+                    <div className="text-[10px] uppercase tracking-widest text-neutral-400 mb-1">Düzen</div>
+                    <select value={values.layout || ""} onChange={(e) => setValues({ ...values, layout: e.target.value })} className="liv-input" data-testid="design-layout">
+                        <option value="">Akıllı Seçim (önerilen)</option>
+                        {(options?.layouts || []).map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <div className="text-[10px] uppercase tracking-widest text-neutral-400 mb-1">Tipografi</div>
+                    <select value={values.typography || ""} onChange={(e) => setValues({ ...values, typography: e.target.value })} className="liv-input" data-testid="design-typography">
+                        <option value="">Akıllı Seçim</option>
+                        {(options?.typographies || []).map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <div className="text-[10px] uppercase tracking-widest text-neutral-400 mb-1">Sahne / Atmosfer</div>
+                    <select value={values.scene || ""} onChange={(e) => setValues({ ...values, scene: e.target.value })} className="liv-input" data-testid="design-scene">
+                        <option value="">Akıllı Seçim</option>
+                        {(options?.scenes || []).map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+                    </select>
+                </div>
+                <div className="space-y-1.5" data-testid="design-drama">
+                    <div className="flex justify-between">
+                        <span className="text-[10px] uppercase tracking-widest text-neutral-400">Dramatizm</span>
+                        <span className="text-[11px] text-liv-yellow font-semibold">{["", "Minimal", "Dengeli", "Yüksek"][values.drama || 2]}</span>
+                    </div>
+                    <input type="range" min={1} max={3} step={1} value={values.drama || 2} onChange={(e) => setValues({ ...values, drama: parseInt(e.target.value, 10) })} className="w-full accent-liv-yellow" />
+                </div>
+                <div className="space-y-1.5 pt-1 border-t border-liv-border/50">
+                    <div className="text-[10px] uppercase tracking-widest text-neutral-400">Marka İmzası (opsiyonel)</div>
+                    <label className="flex items-start gap-2 text-[11px] text-neutral-300 cursor-pointer">
+                        <input type="checkbox" checked={!!values.show_city} onChange={(e) => setValues({ ...values, show_city: e.target.checked })} className="mt-0.5 accent-liv-yellow" data-testid="design-show-city" />
+                        <span>Şehir motifi ekle (settings'teki city kullanılır)</span>
+                    </label>
+                    <label className="flex items-start gap-2 text-[11px] text-neutral-300 cursor-pointer">
+                        <input type="checkbox" checked={!!values.show_year} onChange={(e) => setValues({ ...values, show_year: e.target.checked })} className="mt-0.5 accent-liv-yellow" data-testid="design-show-year" />
+                        <span>Kuruluş yılı ekle ("EST. YYYY" köşede)</span>
+                    </label>
+                </div>
+            </div>
+        )}
+    </div>
+);
+
 const AiStudio = () => {
     const [templates, setTemplates] = useState([]);
+    const [designOptions, setDesignOptions] = useState(null);
     const [players, setPlayers] = useState([]);
     const [matches, setMatches] = useState([]);
+    const [teamPhotos, setTeamPhotos] = useState([]);
     const [activeKey, setActiveKey] = useState("");
     const [ctx, setCtx] = useState({});
     const [aspect, setAspect] = useState(null);
     const [quality, setQuality] = useState("high");
     const [title, setTitle] = useState("");
+    const [variationCount, setVariationCount] = useState(1);
+    // Design customizer state
+    const [customDesign, setCustomDesign] = useState(false);
+    const [customVals, setCustomVals] = useState({ drama: 2 });
+    // Reference images: home_crest, away_crest, team_photo (data urls)
+    const [refs, setRefs] = useState({});
     const [submitting, setSubmitting] = useState(false);
     const [jobs, setJobs] = useState([]);
     const pollRef = useRef(null);
@@ -35,19 +143,20 @@ const AiStudio = () => {
     useEffect(() => {
         Promise.all([
             adminApi.aiTemplates(),
+            adminApi.aiDesignOptions(),
             adminApi.list("players"),
             adminApi.list("matches"),
+            adminApi.list("team_photos"),
             adminApi.aiJobs(30),
-        ]).then(([t, p, m, j]) => {
-            setTemplates(t);
-            setPlayers(p);
-            setMatches(m);
+        ]).then(([t, d, p, m, tp, j]) => {
+            setTemplates(t); setDesignOptions(d); setPlayers(p); setMatches(m);
+            setTeamPhotos((tp || []).filter((x) => x.active !== false));
             setJobs(j);
             if (t[0]) setActiveKey(t[0].key);
-        });
+        }).catch((e) => toast.error("Veri yüklenemedi: " + e.message));
     }, []);
 
-    // Poll active jobs (pending/processing)
+    // Poll active jobs
     useEffect(() => {
         const needsPoll = jobs.some((j) => j.status === "pending" || j.status === "processing");
         if (!needsPoll) {
@@ -56,10 +165,7 @@ const AiStudio = () => {
         }
         if (pollRef.current) return;
         pollRef.current = setInterval(async () => {
-            try {
-                const fresh = await adminApi.aiJobs(30);
-                setJobs(fresh);
-            } catch (_) {}
+            try { setJobs(await adminApi.aiJobs(30)); } catch (_) {}
         }, 3000);
         return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
     }, [jobs]);
@@ -67,69 +173,81 @@ const AiStudio = () => {
     const active = useMemo(() => templates.find((t) => t.key === activeKey), [templates, activeKey]);
 
     useEffect(() => {
-        setCtx({});
+        setCtx({}); setRefs({}); setTitle("");
         setAspect(active?.aspect_ratio || "1:1");
-        setTitle("");
     }, [activeKey, active]);
 
     const setCtxField = (k, v) => setCtx((c) => ({ ...c, [k]: v }));
 
     const submit = async () => {
         if (!active) return;
-        // Validate required inputs (basic presence check)
+        // Basic required validation
         for (const req of active.required_inputs) {
-            const v = ctx[req];
-            if (req === "players" || req === "player_ids") {
-                if (!ctx.player_ids || ctx.player_ids.length === 0) {
-                    toast.error("En az 1 oyuncu seçin"); return;
-                }
-            } else if (!v && v !== 0) {
+            if (req === "players") {
+                if (!ctx.player_ids || ctx.player_ids.length < 5) { toast.error("En az 5 oyuncu seçin"); return; }
+            } else if (!ctx[req] && ctx[req] !== 0 && req !== "player_id") {
                 toast.error(`Eksik alan: ${req}`); return;
+            } else if (req === "player_id" && !ctx.player_id) {
+                toast.error("Oyuncu seçin"); return;
             }
+        }
+        // Build reference_images array based on slot definitions
+        const ref_images = [];
+        const slots = active.reference_slots || [];
+        for (const slot of slots) {
+            const key = slot.replace("?", "");
+            if (refs[key]) ref_images.push(refs[key]);
         }
         setSubmitting(true);
         try {
-            const job = await adminApi.aiGenerateTemplate({
+            const res = await adminApi.aiGenerateTemplate({
                 template_key: active.key,
                 context: ctx,
                 aspect_ratio: aspect,
                 quality,
                 title: title || undefined,
+                variation_count: variationCount,
+                custom_design: customDesign,
+                custom_layout: customVals.layout || null,
+                custom_typography: customVals.typography || null,
+                custom_scene: customVals.scene || null,
+                custom_drama: customVals.drama || null,
+                custom_show_city: !!customVals.show_city,
+                custom_show_year: !!customVals.show_year,
+                reference_images: ref_images,
             });
-            setJobs((j) => [job, ...j].slice(0, 30));
-            toast.success("Üretim başlatıldı — sonuç hazır olduğunda görünecek");
+            setJobs((prev) => [...(res.jobs || []), ...prev].slice(0, 50));
+            toast.success(`${variationCount} varyasyon üretimi başlatıldı (${variationCount} kredi düşüldü)`);
         } catch (e) {
-            const msg = e?.response?.data?.detail || e.message;
-            toast.error("Başlatılamadı: " + msg);
+            toast.error("Başlatılamadı: " + (e?.response?.data?.detail || e.message));
         } finally { setSubmitting(false); }
     };
 
-    const refreshJobs = async () => {
-        const j = await adminApi.aiJobs(30);
-        setJobs(j);
-    };
+    const refreshJobs = async () => setJobs(await adminApi.aiJobs(30));
 
     const needsPlayer = active?.required_inputs.includes("player_id");
-    const needsPlayers = active?.required_inputs.includes("players") || active?.required_inputs.includes("player_ids");
-    const needsMatch = active?.required_inputs.some((r) => ["home_team", "away_team", "match_date", "venue", "home_score", "away_score"].includes(r));
+    const needsPlayers = active?.required_inputs.includes("players");
+    const needsMatch = active?.required_inputs.some((r) => ["home_name", "away_name", "home_score", "away_score"].includes(r));
+    const slots = active?.reference_slots || [];
 
     return (
-        <div className="space-y-8" data-testid="ai-studio">
+        <div className="space-y-6" data-testid="ai-studio">
             <div>
                 <div className="overline">AI Medya Stüdyosu</div>
-                <h1 className="font-display text-5xl md:text-6xl uppercase mt-1 inline-flex items-center gap-3"><Wand2 className="w-8 h-8 text-liv-yellow" /> Şablon Üretici</h1>
-                <p className="text-sm text-neutral-400 mt-2">8 hazır sosyal medya şablonu. gpt-image-2 arka planda çalışır, üretim bitince görsel arşivde belirir (her üretim 1 kredi).</p>
+                <h1 className="font-display text-5xl md:text-6xl uppercase mt-1 inline-flex items-center gap-3">
+                    <Wand2 className="w-8 h-8 text-liv-yellow" /> Şablon Üretici
+                </h1>
+                <p className="text-sm text-neutral-400 mt-2">
+                    9 hazır şablon · Design DNA · Varyasyon (1 veya 3) · Referans görsel destekli gpt-image-2.
+                    Her varyasyon 1 kredi.
+                </p>
             </div>
 
-            {/* Template pills */}
+            {/* Template pills (sorted by order) */}
             <div className="flex flex-wrap gap-2" data-testid="template-pills">
                 {templates.map((t) => (
-                    <button
-                        key={t.key}
-                        onClick={() => setActiveKey(t.key)}
-                        data-testid={`template-pill-${t.key}`}
-                        className={`px-4 py-2 border text-xs uppercase tracking-widest transition-colors ${activeKey === t.key ? "bg-liv-yellow text-black border-liv-yellow" : "bg-liv-card border-liv-border text-neutral-300 hover:border-liv-yellow"}`}
-                    >
+                    <button key={t.key} onClick={() => setActiveKey(t.key)} data-testid={`template-pill-${t.key}`}
+                        className={`px-4 py-2 border text-xs uppercase tracking-widest transition-colors ${activeKey === t.key ? "bg-liv-yellow text-black border-liv-yellow" : "bg-liv-card border-liv-border text-neutral-300 hover:border-liv-yellow"}`}>
                         {t.name}
                     </button>
                 ))}
@@ -137,160 +255,231 @@ const AiStudio = () => {
 
             {active && (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="lg:col-span-2 bg-liv-card border border-liv-border p-6 space-y-4" data-testid="template-form">
-                        <div>
-                            <h2 className="font-display text-2xl uppercase">{active.name}</h2>
-                            <p className="text-xs text-neutral-400 mt-1">{active.description}</p>
-                        </div>
-
-                        {/* Dynamic fields per template */}
-                        {needsPlayer && (
+                    {/* Left: dynamic form */}
+                    <div className="lg:col-span-2 space-y-4" data-testid="template-form">
+                        <div className="bg-liv-card border border-liv-border p-6 space-y-4">
                             <div>
-                                <label className="liv-label">Oyuncu</label>
-                                <select className="liv-input" value={ctx.player_id || ""} onChange={(e) => setCtxField("player_id", e.target.value)} data-testid="field-player">
-                                    <option value="">— Seçin —</option>
-                                    {players.map((p) => <option key={p.id} value={p.id}>{`#${p.jersey_number} · ${p.name} (${p.position})`}</option>)}
-                                </select>
+                                <h2 className="font-display text-2xl uppercase">{active.name}</h2>
+                                <p className="text-xs text-neutral-400 mt-1">{active.description}</p>
                             </div>
-                        )}
 
-                        {needsPlayers && (
-                            <div>
-                                <label className="liv-label">İlk 11 Oyuncuları (en az 1, max 11)</label>
-                                <select multiple className="liv-input !h-40" value={ctx.player_ids || []} onChange={(e) => setCtxField("player_ids", Array.from(e.target.selectedOptions).map((o) => o.value).slice(0, 11))} data-testid="field-players">
-                                    {players.map((p) => <option key={p.id} value={p.id}>{`#${p.jersey_number} · ${p.name} (${p.position})`}</option>)}
-                                </select>
-                                <div className="text-[10px] text-neutral-500 mt-1">Ctrl/Cmd tuşuyla çoklu seç ({(ctx.player_ids || []).length} seçili)</div>
-                            </div>
-                        )}
+                            {/* Dynamic fields per template */}
+                            {needsPlayer && (
+                                <div>
+                                    <label className="liv-label">Oyuncu</label>
+                                    <select className="liv-input" value={ctx.player_id || ""} onChange={(e) => setCtxField("player_id", e.target.value)} data-testid="field-player">
+                                        <option value="">— Seçin —</option>
+                                        {players.map((p) => <option key={p.id} value={p.id}>{`#${p.jersey_number} · ${p.name} (${p.position})`}</option>)}
+                                    </select>
+                                </div>
+                            )}
 
-                        {active.key === "starting_xi" && (
-                            <div className="grid grid-cols-2 gap-3">
-                                <div><label className="liv-label">Formasyon</label><input className="liv-input" value={ctx.formation || ""} placeholder="4-3-3" onChange={(e) => setCtxField("formation", e.target.value)} /></div>
-                                <div><label className="liv-label">Rakip</label><input className="liv-input" value={ctx.opponent || ""} placeholder="Nilüfer FK" onChange={(e) => setCtxField("opponent", e.target.value)} /></div>
-                            </div>
-                        )}
+                            {needsPlayers && (
+                                <>
+                                    <div>
+                                        <label className="liv-label">İlk 11 Oyuncuları (sıra önemli — 11 tane seçin)</label>
+                                        <select multiple className="liv-input !h-48" value={ctx.player_ids || []} onChange={(e) => setCtxField("player_ids", Array.from(e.target.selectedOptions).map((o) => o.value).slice(0, 11))} data-testid="field-players">
+                                            {players.map((p) => <option key={p.id} value={p.id}>{`#${p.jersey_number} · ${p.name} (${p.position})`}</option>)}
+                                        </select>
+                                        <div className="text-[10px] text-neutral-500 mt-1">{(ctx.player_ids || []).length} seçili · Ctrl/Cmd ile çoklu</div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div><label className="liv-label">Formasyon</label><input className="liv-input" value={ctx.formation || ""} placeholder="4-3-3" onChange={(e) => setCtxField("formation", e.target.value)} /></div>
+                                        <div><label className="liv-label">Rakip (opsiyonel)</label><input className="liv-input" value={ctx.away_name || ""} onChange={(e) => setCtxField("away_name", e.target.value)} /></div>
+                                    </div>
+                                    <div><label className="liv-label">Teknik Direktör (opsiyonel)</label><input className="liv-input" value={ctx.coach || ""} onChange={(e) => setCtxField("coach", e.target.value)} /></div>
+                                </>
+                            )}
 
-                        {needsMatch && (
-                            <div>
-                                <label className="liv-label">Maç Seç (otomatik doldur)</label>
-                                <select className="liv-input" value={ctx._match_id || ""} onChange={(e) => {
-                                    const m = matches.find((mm) => mm.id === e.target.value);
-                                    if (m) {
-                                        setCtx((c) => ({
-                                            ...c,
-                                            _match_id: m.id,
-                                            match_id: m.id,
-                                            home_team: m.home_team,
-                                            away_team: m.away_team,
-                                            match_date: (m.match_date || "").slice(0, 10),
-                                            venue: m.venue,
-                                            competition: m.competition,
-                                            home_score: m.home_score,
-                                            away_score: m.away_score,
-                                        }));
-                                    } else {
-                                        setCtxField("_match_id", "");
-                                    }
-                                }} data-testid="field-match">
-                                    <option value="">— Elle gir —</option>
-                                    {matches.map((m) => <option key={m.id} value={m.id}>{`${(m.match_date || "").slice(0, 10)} · ${m.home_team} vs ${m.away_team} (${m.status})`}</option>)}
-                                </select>
-                                <div className="grid grid-cols-2 gap-3 mt-3">
-                                    <div><label className="liv-label">Ev Sahibi</label><input className="liv-input" value={ctx.home_team || ""} onChange={(e) => setCtxField("home_team", e.target.value)} /></div>
-                                    <div><label className="liv-label">Deplasman</label><input className="liv-input" value={ctx.away_team || ""} onChange={(e) => setCtxField("away_team", e.target.value)} /></div>
-                                    <div><label className="liv-label">Tarih (YYYY-MM-DD)</label><input className="liv-input" value={ctx.match_date || ""} onChange={(e) => setCtxField("match_date", e.target.value)} /></div>
-                                    <div><label className="liv-label">Stat / Yer</label><input className="liv-input" value={ctx.venue || ""} onChange={(e) => setCtxField("venue", e.target.value)} /></div>
-                                    {active.required_inputs.includes("home_score") && (<>
-                                        <div><label className="liv-label">Ev Skor</label><input type="number" className="liv-input" value={ctx.home_score ?? ""} onChange={(e) => setCtxField("home_score", Number(e.target.value))} /></div>
-                                        <div><label className="liv-label">Dep Skor</label><input type="number" className="liv-input" value={ctx.away_score ?? ""} onChange={(e) => setCtxField("away_score", Number(e.target.value))} /></div>
-                                    </>)}
+                            {needsMatch && (
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="liv-label">Maç Seç (otomatik doldur)</label>
+                                        <select className="liv-input" value={ctx._match_id || ""} onChange={(e) => {
+                                            const m = matches.find((mm) => mm.id === e.target.value);
+                                            if (m) {
+                                                setCtx((c) => ({
+                                                    ...c, _match_id: m.id,
+                                                    home_name: m.home_team, away_name: m.away_team,
+                                                    date_str: (m.match_date || "").slice(0, 10),
+                                                    time_str: (m.match_date || "").slice(11, 16),
+                                                    stadium: m.venue, league_display: m.competition,
+                                                    home_score: m.home_score, away_score: m.away_score,
+                                                }));
+                                            } else { setCtxField("_match_id", ""); }
+                                        }} data-testid="field-match">
+                                            <option value="">— Elle gir —</option>
+                                            {matches.map((m) => <option key={m.id} value={m.id}>{`${(m.match_date || "").slice(0, 10)} · ${m.home_team} vs ${m.away_team} (${m.status})`}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div><label className="liv-label">Ev Sahibi</label><input className="liv-input" value={ctx.home_name || ""} onChange={(e) => setCtxField("home_name", e.target.value)} /></div>
+                                        <div><label className="liv-label">Deplasman</label><input className="liv-input" value={ctx.away_name || ""} onChange={(e) => setCtxField("away_name", e.target.value)} /></div>
+                                        <div><label className="liv-label">Tarih</label><input className="liv-input" value={ctx.date_str || ""} placeholder="02.06.2026" onChange={(e) => setCtxField("date_str", e.target.value)} /></div>
+                                        <div><label className="liv-label">Saat</label><input className="liv-input" value={ctx.time_str || ""} placeholder="19:00" onChange={(e) => setCtxField("time_str", e.target.value)} /></div>
+                                        <div className="col-span-2"><label className="liv-label">Stat</label><input className="liv-input" value={ctx.stadium || ""} onChange={(e) => setCtxField("stadium", e.target.value)} /></div>
+                                        <div className="col-span-2"><label className="liv-label">Lig / Maç Tipi</label><input className="liv-input" value={ctx.league_display || ""} placeholder="BAL Ligi 4. Grup" onChange={(e) => setCtxField("league_display", e.target.value)} /></div>
+                                        {active.required_inputs.includes("home_score") && (<>
+                                            <div><label className="liv-label">Ev Skor</label><input type="number" className="liv-input" value={ctx.home_score ?? ""} onChange={(e) => setCtxField("home_score", Number(e.target.value))} /></div>
+                                            <div><label className="liv-label">Dep Skor</label><input type="number" className="liv-input" value={ctx.away_score ?? ""} onChange={(e) => setCtxField("away_score", Number(e.target.value))} /></div>
+                                        </>)}
+                                    </div>
+                                </div>
+                            )}
+
+                            {active.key === "special_day" && (
+                                <>
+                                    <div><label className="liv-label">Başlık</label><input className="liv-input" value={ctx.title || ""} placeholder="23 NİSAN" onChange={(e) => setCtxField("title", e.target.value)} /></div>
+                                    <div><label className="liv-label">Gövde Metni</label><textarea rows={3} className="liv-input" value={ctx.body_text || ""} placeholder="23 Nisan Ulusal Egemenlik ve Çocuk Bayramı kutlu olsun." onChange={(e) => setCtxField("body_text", e.target.value)} /></div>
+                                    <div><label className="liv-label">Tür İpucu (opsiyonel)</label><input className="liv-input" value={ctx.occasion_hint || ""} placeholder="resmi bayram / dini bayram / kuruluş yıldönümü" onChange={(e) => setCtxField("occasion_hint", e.target.value)} /></div>
+                                </>
+                            )}
+
+                            {active.key === "new_transfer" && (
+                                <div><label className="liv-label">Önceki Kulüp (opsiyonel)</label><input className="liv-input" value={ctx.from_club || ""} onChange={(e) => setCtxField("from_club", e.target.value)} /></div>
+                            )}
+
+                            {active.key === "fan_invite" && (
+                                <>
+                                    <div><label className="liv-label">Maç Metni</label><input className="liv-input" value={ctx.match_text || ""} placeholder="Pazar 19:00 Yolçatı" onChange={(e) => setCtxField("match_text", e.target.value)} /></div>
+                                    <div><label className="liv-label">Taraftar Mesajı</label><input className="liv-input" value={ctx.message || ""} placeholder="Tribünlere bekliyoruz!" onChange={(e) => setCtxField("message", e.target.value)} /></div>
+                                </>
+                            )}
+
+                            {active.key === "motm" && (
+                                <>
+                                    <div><label className="liv-label">Alt Başlık (opsiyonel)</label><input className="liv-input" value={ctx.subtitle || ""} placeholder="3. Hafta" onChange={(e) => setCtxField("subtitle", e.target.value)} /></div>
+                                    <div><label className="liv-label">Maç Bağlamı (opsiyonel)</label><input className="liv-input" value={ctx.match_context || ""} placeholder="Livanespor 3-1 Gemlik" onChange={(e) => setCtxField("match_context", e.target.value)} /></div>
+                                </>
+                            )}
+
+                            {active.key === "full_time" && (
+                                <>
+                                    <label className="flex items-center gap-2 text-xs text-neutral-300 cursor-pointer">
+                                        <input type="checkbox" checked={!!ctx.show_goals} onChange={(e) => setCtxField("show_goals", e.target.checked)} className="accent-liv-yellow" />
+                                        Gol Atanlar panelini göster
+                                    </label>
+                                    {ctx.show_goals && (
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div><label className="liv-label">Ev Gol Atanlar (İSİM 23' format, virgülle)</label>
+                                                <input className="liv-input" value={ctx._home_goals_str || ""} onChange={(e) => {
+                                                    setCtxField("_home_goals_str", e.target.value);
+                                                    setCtxField("home_goals", e.target.value.split(",").map((s) => { const [n, m] = s.split(" "); return { player_name: (n || "").trim(), minute: parseInt((m || "").replace("'", ""), 10) || null }; }).filter((x) => x.player_name));
+                                                }} placeholder="KEREM 23, CEM 67" /></div>
+                                            <div><label className="liv-label">Dep Gol Atanlar</label>
+                                                <input className="liv-input" value={ctx._away_goals_str || ""} onChange={(e) => {
+                                                    setCtxField("_away_goals_str", e.target.value);
+                                                    setCtxField("away_goals", e.target.value.split(",").map((s) => { const [n, m] = s.split(" "); return { player_name: (n || "").trim(), minute: parseInt((m || "").replace("'", ""), 10) || null }; }).filter((x) => x.player_name));
+                                                }} /></div>
+                                        </div>
+                                    )}
+                                    <div><label className="liv-label">Skor Tipi</label>
+                                        <select className="liv-input" value={ctx.score_type || "normal"} onChange={(e) => setCtxField("score_type", e.target.value)}>
+                                            <option value="normal">Normal</option><option value="penalty">Penaltılar</option>
+                                        </select>
+                                    </div>
+                                </>
+                            )}
+
+                            <div><label className="liv-label">Ek Vurgu Metni (opsiyonel)</label><input className="liv-input" value={ctx.extra_text || ""} onChange={(e) => setCtxField("extra_text", e.target.value)} /></div>
+
+                            {/* Aspect / Quality / Variation / Title */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                <div>
+                                    <label className="liv-label">En Boy</label>
+                                    <select className="liv-input" value={aspect || "1:1"} onChange={(e) => setAspect(e.target.value)} data-testid="field-aspect">
+                                        <option value="1:1">Kare 1:1</option><option value="16:9">16:9</option><option value="4:5">4:5</option><option value="9:16">Story 9:16</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="liv-label">Kalite</label>
+                                    <select className="liv-input" value={quality} onChange={(e) => setQuality(e.target.value)} data-testid="field-quality">
+                                        <option value="high">Yüksek</option><option value="medium">Orta</option><option value="low">Düşük</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="liv-label">Varyasyon</label>
+                                    <select className="liv-input" value={variationCount} onChange={(e) => setVariationCount(parseInt(e.target.value, 10))} data-testid="field-variation">
+                                        <option value={1}>1 varyasyon (1 kredi)</option>
+                                        <option value={3}>3 varyasyon (3 kredi)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="liv-label">Başlık</label>
+                                    <input className="liv-input" value={title} placeholder="Otomatik" onChange={(e) => setTitle(e.target.value)} />
                                 </div>
                             </div>
-                        )}
-
-                        {active.key === "goal" && (
-                            <div className="grid grid-cols-2 gap-3">
-                                <div><label className="liv-label">Dakika</label><input className="liv-input" value={ctx.minute || ""} placeholder="67" onChange={(e) => setCtxField("minute", e.target.value)} /></div>
-                                <div><label className="liv-label">Rakip (opsiyonel)</label><input className="liv-input" value={ctx.opponent || ""} onChange={(e) => setCtxField("opponent", e.target.value)} /></div>
-                            </div>
-                        )}
-
-                        {active.key === "match_result" && (
-                            <div><label className="liv-label">Gol Atanlar (virgülle)</label><input className="liv-input" value={(ctx.scorers || []).join(", ")} onChange={(e) => setCtxField("scorers", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))} placeholder="Kerem 23', Cem 67'" /></div>
-                        )}
-
-                        {active.key === "new_transfer" && (
-                            <div><label className="liv-label">Önceki Kulüp (opsiyonel)</label><input className="liv-input" value={ctx.from_club || ""} onChange={(e) => setCtxField("from_club", e.target.value)} /></div>
-                        )}
-
-                        {active.key === "player_of_week" && (
-                            <div><label className="liv-label">İstatistikler JSON (ör. {"{"}"gol":2,"asist":1{"}"})</label>
-                                <input className="liv-input" value={ctx._stats_str || ""} onChange={(e) => {
-                                    setCtxField("_stats_str", e.target.value);
-                                    try { setCtxField("stats", JSON.parse(e.target.value)); } catch { setCtxField("stats", {}); }
-                                }} placeholder='{"gol": 2, "asist": 1}' /></div>
-                        )}
-
-                        {active.key === "fan_invite" && (
-                            <div className="grid grid-cols-1 gap-3">
-                                <div><label className="liv-label">Maç Metni</label><input className="liv-input" value={ctx.match_text || ""} placeholder="Pazar 19:00 Yolçatı" onChange={(e) => setCtxField("match_text", e.target.value)} /></div>
-                                <div><label className="liv-label">Mesaj</label><input className="liv-input" value={ctx.message || ""} placeholder="Tribünlere bekliyoruz!" onChange={(e) => setCtxField("message", e.target.value)} /></div>
-                            </div>
-                        )}
-
-                        {/* Common */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="liv-label">En Boy Oranı</label>
-                                <select className="liv-input" value={aspect || "1:1"} onChange={(e) => setAspect(e.target.value)} data-testid="field-aspect">
-                                    <option value="1:1">Kare 1:1</option>
-                                    <option value="16:9">Yatay 16:9</option>
-                                    <option value="4:5">Dikey 4:5</option>
-                                    <option value="9:16">Story 9:16</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="liv-label">Kalite</label>
-                                <select className="liv-input" value={quality} onChange={(e) => setQuality(e.target.value)} data-testid="field-quality">
-                                    <option value="high">Yüksek</option>
-                                    <option value="medium">Orta</option>
-                                    <option value="low">Düşük (hızlı)</option>
-                                </select>
-                            </div>
                         </div>
-                        <div>
-                            <label className="liv-label">Başlık (opsiyonel)</label>
-                            <input className="liv-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Otomatik üretilecek" />
-                        </div>
+
+                        {/* Reference images */}
+                        {slots.length > 0 && (
+                            <div className="bg-liv-card border border-liv-border p-6 space-y-3" data-testid="reference-images">
+                                <h3 className="font-display text-lg uppercase">Referans Görseller</h3>
+                                <p className="text-[11px] text-neutral-400">Logo, oyuncu portresi veya takım fotoğrafı yükleyin — prompt'a referans olarak dahil edilir.</p>
+                                <div className="grid grid-cols-3 gap-3">
+                                    {slots.map((slot) => {
+                                        const key = slot.replace("?", "");
+                                        const labels = { home_crest: "Ev Sahibi Logo", away_crest: "Deplasman Logo", team_photo: "Takım Fotoğrafı", player_photo: "Oyuncu Portresi", club_crest: "Kulüp Logosu" };
+                                        return <RefImageSlot key={key} label={labels[key] || key} value={refs[key]} onChange={(v) => setRefs({ ...refs, [key]: v })} testid={key} />;
+                                    })}
+                                </div>
+                                {teamPhotos.length > 0 && slots.includes("team_photo?") && (
+                                    <div>
+                                        <div className="text-[10px] uppercase tracking-widest text-neutral-400 mt-3 mb-1">Ya da kayıtlı takım fotoğraflarından seç</div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {teamPhotos.map((tp) => (
+                                                <button key={tp.id} onClick={() => setRefs({ ...refs, team_photo: tp.photo_url })}
+                                                    className="w-16 h-16 border border-liv-border hover:border-liv-yellow overflow-hidden" title={tp.title}>
+                                                    <img src={tp.photo_url} alt={tp.title} className="w-full h-full object-cover" />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Design customizer */}
+                        <DesignCustomizer options={designOptions} custom={customDesign} setCustom={setCustomDesign} values={customVals} setValues={setCustomVals} />
 
                         <button disabled={submitting} onClick={submit} className="btn-primary inline-flex items-center gap-2 disabled:opacity-60" data-testid="submit-template">
-                            {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Kuyruğa alınıyor…</> : <><Wand2 className="w-4 h-4" /> Üretimi Başlat (1 kredi)</>}
+                            {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Kuyruğa alınıyor…</> : <><Wand2 className="w-4 h-4" /> {variationCount} Varyasyon Üret ({variationCount} kredi)</>}
                         </button>
                     </div>
 
-                    {/* Jobs panel */}
+                    {/* Right: Jobs panel */}
                     <div className="bg-liv-card border border-liv-border p-6" data-testid="jobs-panel">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="font-display text-2xl uppercase">İşler</h3>
                             <button onClick={refreshJobs} className="text-xs text-neutral-400 hover:text-liv-yellow inline-flex items-center gap-1" data-testid="refresh-jobs"><RefreshCw className="w-3 h-3" /> Yenile</button>
                         </div>
                         {jobs.length === 0 && <div className="text-sm text-neutral-500">Henüz üretim yok.</div>}
-                        <div className="space-y-3 max-h-[640px] overflow-y-auto">
+                        <div className="space-y-3 max-h-[720px] overflow-y-auto">
                             {jobs.map((j) => (
                                 <div key={j.id} className="border border-liv-border bg-liv-surface p-3" data-testid={`job-${j.id}`}>
                                     <div className="flex items-center gap-2 text-xs">
-                                        <JobStatusIcon status={j.status} />
+                                        <StatusIcon status={j.status} />
                                         <span className="uppercase tracking-widest text-neutral-400">{j.template_key}</span>
+                                        {j.variation_index !== undefined && <span className="text-[10px] text-liv-yellow">V{(j.variation_index || 0) + 1}</span>}
                                         <span className="ml-auto text-[10px] text-neutral-500">{(j.created_at || "").slice(11, 16)}</span>
                                     </div>
                                     {j.status === "success" && j.public_url && (
                                         <div className="mt-2">
-                                            <img src={`${API.replace(/\/api$/, "")}${j.public_url}`} alt="" className="w-full aspect-square object-cover border border-liv-border" />
-                                            <a href={`${API.replace(/\/api$/, "")}${j.public_url}`} download className="mt-2 text-xs text-liv-yellow hover:underline inline-flex items-center gap-1"><Download className="w-3 h-3" /> İndir</a>
+                                            <img src={mediaAbsUrl(j.public_url)} alt="" className="w-full aspect-square object-cover border border-liv-border" />
+                                            {j.design && (
+                                                <div className="text-[9px] text-neutral-500 mt-1">
+                                                    {j.design.layout} · {j.design.scene} · {j.design.typography} · drama {j.design.drama}
+                                                </div>
+                                            )}
+                                            <a href={mediaAbsUrl(j.public_url)} download className="mt-2 text-xs text-liv-yellow hover:underline inline-flex items-center gap-1"><Download className="w-3 h-3" /> İndir</a>
                                         </div>
                                     )}
-                                    {j.status === "error" && <div className="text-xs text-red-400 mt-1 line-clamp-3">{j.error}</div>}
+                                    {j.status === "error" && (
+                                        <div className="mt-1">
+                                            <div className="text-xs text-red-400 line-clamp-3">{j.error}</div>
+                                            {j.refunded && <div className="text-[10px] text-green-400 mt-1">✓ 1 kredi iade edildi</div>}
+                                        </div>
+                                    )}
                                     {j.status === "processing" && <div className="text-xs text-neutral-400 mt-1">gpt-image-2 çalışıyor (~20-60sn)…</div>}
                                     {j.status === "pending" && <div className="text-xs text-neutral-500 mt-1">Kuyrukta</div>}
                                 </div>

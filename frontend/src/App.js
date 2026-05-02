@@ -43,6 +43,7 @@ import AdminMessages from "@/pages/admin/Messages";
 import AdminMedia from "@/pages/admin/Media";
 import AdminAi from "@/pages/admin/AiPanel";
 import AdminAiStudio from "@/pages/admin/AiStudio";
+import AdminTeamPhotos from "@/pages/admin/TeamPhotos";
 import AdminSettings from "@/pages/admin/Settings";
 import AdminUsers from "@/pages/admin/Users";
 import AdminAccount from "@/pages/admin/Account";
@@ -93,6 +94,7 @@ function App() {
                     <Route path="/admin/media" element={<AdminLayout><AdminMedia /></AdminLayout>} />
                     <Route path="/admin/ai" element={<AdminLayout><AdminAi /></AdminLayout>} />
                     <Route path="/admin/ai-studio" element={<AdminLayout><AdminAiStudio /></AdminLayout>} />
+                    <Route path="/admin/team-photos" element={<AdminLayout><AdminTeamPhotos /></AdminLayout>} />
                     <Route path="/admin/settings" element={<AdminLayout><AdminSettings /></AdminLayout>} />
                     <Route path="/admin/users" element={<AdminLayout><AdminUsers /></AdminLayout>} />
                     <Route path="/admin/account" element={<AdminLayout><AdminAccount /></AdminLayout>} />

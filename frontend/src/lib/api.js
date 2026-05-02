@@ -112,6 +112,7 @@ export const adminApi = {
     birthdays: (days = 30) => api.get("/admin/dashboard/birthdays", { params: { days } }).then((r) => r.data),
     // AI templates (Phase 2)
     aiTemplates: () => api.get("/admin/ai/templates").then((r) => r.data),
+    aiDesignOptions: () => api.get("/admin/ai/design-options").then((r) => r.data),
     aiGenerateTemplate: (data) => api.post("/admin/ai/generate-template", data).then((r) => r.data),
     aiJobs: (limit = 30) => api.get("/admin/ai/jobs", { params: { limit } }).then((r) => r.data),
     aiJob: (jobId) => api.get(`/admin/ai/jobs/${jobId}`).then((r) => r.data),

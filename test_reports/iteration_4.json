@@ -1,0 +1,46 @@
+{
+  "summary": "Phase 2 v2 overhaul testing: DR AI-style 9-template catalog, Design DNA system, variation_count=1|3, theme.css, site-settings validation, team_photos CRUD, multi-tenant club_id. Backend: 17/17 tests in test_phase2_v2.py (1 xfail for atomicity bug) + 45/45 regression (phase1 12 + backend_test 33) all PASSED. Frontend: /admin/ai-studio 9 template pills in correct order (MAÇ HAFTASI → TARAFTAR DAVETİ), DesignCustomizer Akıllı/Özelleştir toggles work, variation dropdown has ONLY 2 options ('1 varyasyon (1 kredi)', '3 varyasyon (3 kredi)'), drama range slider present, 2 brand-signature checkboxes, Maç Sonucu 'Gol Atanlar panelini göster' checkbox reveals EV/DEP GOL ATANLAR inputs + SKOR TİPİ dropdown, sidebar order correct (Medya Arşivi → Takım Fotoğrafları → AI Görsel (Prompt) → AI Stüdyo), /admin/team-photos loads with CrudPage header 'TAKIM FOTOĞRAFLARI' and + YENİ EKLE button. Jobs panel renders SPECIAL_DAY v1 card with design tag 'editorial · low_angle · athletic · drama 2' confirming Design DNA custom params round-tripped to success. 1 real gpt-image-2 call made (special_day custom-design 1:1 low quality). Credit end-state 25/30 Starter.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/admin/ai/generate-template", "issue": "Non-atomic credit check for variation_count=3 with insufficient balance: server.py:1018 loops consume_credit(1) n times. With balance=1 and n=3, 1 credit is consumed before the 2nd iteration fails with 402. The 402 returns BEFORE any job is created (good), but 1 credit is burned and not refunded. Fix: check balance >= n up-front OR wrap the n-credit consumption in a single atomic deduction (and refund on 402).", "priority": "MINOR"},
+      {"endpoint": "/api/admin/ai/generate-template", "issue": "Legacy Phase-1 comment in iteration_3: credit still consumed BEFORE template_key validation... FIXED in v2 (line 1014 now validates template_key first)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase2_v2.py",
+    "/app/backend/tests/test_phase2_ai_media.py",
+    "/app/backend/tests/test_phase1.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/phase2_v2_results.xml",
+    "/app/test_reports/pytest/regression_v2_results.xml"
+  ],
+  "action_items": [
+    "(Minor) Make variation_count credit check atomic: pre-check credit_balance >= n and deduct n in one op, OR refund partial deduction if any iteration fails with 402. Currently balance=1 + n=3 → partial 1-credit burn before 402.",
+    "(Enhancement) Add data-testid attributes to template-specific context form fields (field-title, field-body_text, field-occasion_hint, field-subtitle, field-match_context) for more robust UI test selectors. Currently only shared fields (field-variation, field-aspect, field-quality, field-player, field-match) have testids.",
+    "(Enhancement) Test variation field testid is 'field-variation' (not 'field-variation_count'); document in data-testid map for next testing agent."
+  ],
+  "critical_code_review_comments": [
+    "server.py:1018 consume_credit loop for variation_count > 1 is non-atomic and can partially burn credits before returning 402. Should validate balance upfront.",
+    "server.py is now ~1700 lines — continue to be a candidate for router split (ai / admin / public / subscription). Phase 2 v2 added ~200 more lines of ai-template/theme/site-settings logic.",
+    "_run_ai_job refund-on-error path is in place (requirement says 'refunded=true' + credit refund) — code review only, could not artificially trigger a failure without touching production storage. Manual agent check verified this in code.",
+    "ai_media.py 611 lines is dense but well-structured (catalog dicts + resolve_design + prompt builders). Consider moving LAYOUT_RECIPES/SCENE_DESCRIPTIONS/etc into a separate design_dna.py for readability.",
+    "AiStudio.jsx DesignCustomizer when Özelleştir is active renders 3 <select> (layout/typography/scene) but problem statement mentions '4 dropdowns' — appears to actually be 3 selects + 1 drama slider. Copy consistency issue; UI is functionally correct.",
+    "Template-specific form fields (title/body_text/occasion_hint for special_day, subtitle/match_context for motm) lack data-testid attributes — UI renders correctly but automated selector coverage is limited to shared fields."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase2_v2.py (created — 17 tests covering v2 DR AI templates, Design DNA, variations, theme.css, site-settings, team_photos CRUD, multi-tenant)"
+  ],
+  "success_rate": {"backend": "100% (17/17 v2 + 45/45 regression = 62/62)", "frontend": "100%"},
+  "test_credentials": "username='livanespor' (case-insensitive) password='Livanespor2026' — verified",
+  "seed_data_creation": "Created 1 special_day job via custom-design round-trip (editorial/low_angle/athletic/drama 2). Created/deleted TEST_team_photo_v2. Subscription credit adjusted down/up several times during atomicity test; ended at 25 credits / 30 Starter plan.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "v2 test file: /app/backend/tests/test_phase2_v2.py (17 tests, pytest xfail on credit atomicity bug documented at test_variation_count_3_insufficient_credit_atomic). To run: REACT_APP_BACKEND_URL=https://ai-media-hub-37.preview.emergentagent.com pytest backend/tests/ -v. Frontend data-testid map updates: 'field-variation' (not field-variation_count), 'design-customizer', 'design-mode-akilli', 'design-mode-ozellestir', 'design-layout', 'design-typography', 'design-scene', 'design-drama', 'design-show-city', 'design-show-year', 'reference-images', 'ref-{slot_key}', 'ref-{slot_key}-input', 'template-pill-{9_keys}', 'submit-template', 'jobs-panel', 'job-{id}'. /admin/team-photos route loads generic CrudPage. 9 template keys in order: match_week, match_day, lineup, full_time, motm, birthday, special_day, new_transfer, fan_invite. theme.css endpoint: GET /api/public/theme.css (no auth, CSS content-type, has :root + --liv-primary/--liv-secondary/--liv-bg/--liv-theme). Site settings PUT validates hex (#RRGGBB regex) and default_theme (dark|light only).",
+  "rca of the issue": "Partial credit burn on variation_count=3 with insufficient balance (balance=1, n=3): server.py:1018 loops `for _ in range(n): consume_credit(1)`. First iteration succeeds (balance 1→0), second fails → 402. Credit deducted once but not refunded. Root cause: per-iteration atomicity instead of batch atomicity. Reproduction: set balance=1 via credit-adjust, POST generate-template with variation_count=3 → expect 402, observe balance=0 instead of 1. Mitigation: in admin_ai_generate_template, check `subscription.credit_balance >= n` FIRST before any consume_credit call, OR wrap consume_credit in a single atomic $inc operation that verifies final balance >= 0."
+}

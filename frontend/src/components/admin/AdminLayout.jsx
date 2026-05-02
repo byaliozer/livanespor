@@ -24,6 +24,7 @@ const NAV = [
     { to: "/admin/applications", label: "Başvurular", icon: ClipboardList, group: "Akademi" },
     { to: "/admin/messages", label: "Mesajlar", icon: Mail, group: "İletişim" },
     { to: "/admin/media", label: "Medya Arşivi", icon: Image, group: "İçerik" },
+    { to: "/admin/team-photos", label: "Takım Fotoğrafları", icon: Image, group: "İçerik" },
     { to: "/admin/ai", label: "AI Görsel (Prompt)", icon: Wand2, group: "İçerik" },
     { to: "/admin/ai-studio", label: "AI Stüdyo (Şablonlar)", icon: Wand2, group: "İçerik" },
     { to: "/admin/paketim", label: "Paketim", icon: Package, group: "Sistem" },
