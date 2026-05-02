@@ -988,6 +988,12 @@ async def _run_ai_job(job_id: str):
             'design': {'layout': design['layout_key'], 'scene': design['scene_key'],
                        'typography': design['typography_key'], 'drama': design['drama']},
         }})
+        # Auto-publish gallery seeds
+        if cur.get('auto_publish_to_gallery'):
+            await db.ai_media_jobs.update_one({'id': job_id},
+                {'$set': {'published_to_gallery': True, 'gallery_published_at': now_iso()}})
+            await db.media.update_one({'id': media['id']},
+                {'$set': {'published_to_gallery': True, 'gallery_template_key': cur['template_key']}})
     except Exception as e:
         logger.exception(f"AI job {job_id} failed")
         # Refund the 1 credit debited up-front
@@ -1066,6 +1072,109 @@ async def admin_ai_job(job_id: str, user=Depends(require_admin)):
     if not j:
         raise HTTPException(404, "İş bulunamadı")
     return j
+
+# ─────────────────────────── Gallery (Phase 2.1) ───────────────────────────
+class GalleryPublishIn(BaseModel):
+    job_id: str
+    note: Optional[str] = None  # internal
+
+@api_router.post("/admin/ai/gallery/publish")
+async def admin_ai_gallery_publish(payload: GalleryPublishIn, user=Depends(require_admin)):
+    """Opt-in: kullanıcı bir AI görselini örnek galeriye ekler.
+    Galeride kulüp adı/logosu gösterilmez — sadece estetik referans."""
+    j = await db.ai_media_jobs.find_one({'id': payload.job_id}, {'_id': 0})
+    if not j or j.get('status') != 'success' or not j.get('media_id'):
+        raise HTTPException(400, "Sadece başarılı işler galeriye eklenebilir")
+    await db.ai_media_jobs.update_one({'id': payload.job_id},
+        {'$set': {'published_to_gallery': True, 'gallery_published_at': now_iso()}})
+    await db.media.update_one({'id': j['media_id']},
+        {'$set': {'published_to_gallery': True, 'gallery_template_key': j.get('template_key')}})
+    return {'ok': True}
+
+@api_router.post("/admin/ai/gallery/unpublish")
+async def admin_ai_gallery_unpublish(payload: GalleryPublishIn, user=Depends(require_admin)):
+    j = await db.ai_media_jobs.find_one({'id': payload.job_id}, {'_id': 0})
+    if not j:
+        raise HTTPException(404, "İş bulunamadı")
+    await db.ai_media_jobs.update_one({'id': payload.job_id}, {'$set': {'published_to_gallery': False}})
+    if j.get('media_id'):
+        await db.media.update_one({'id': j['media_id']}, {'$set': {'published_to_gallery': False}})
+    return {'ok': True}
+
+@api_router.get("/public/ai/gallery")
+async def public_ai_gallery(template_key: Optional[str] = None, limit: int = 12):
+    """No-auth gallery — anonymized examples per template, sorted newest first."""
+    q: Dict[str, Any] = {'published_to_gallery': True, 'is_deleted': {'$ne': True}, 'public_url': {'$ne': None}}
+    if template_key:
+        q['gallery_template_key'] = template_key
+    rows = await db.media.find(q, {'_id': 0}).sort('created_at', -1).limit(min(limit, 50)).to_list(min(limit, 50))
+    # Strip club-identifying fields
+    return [{
+        'id': r['id'],
+        'public_url': r.get('public_url'),
+        'template_key': r.get('gallery_template_key') or r.get('template_key'),
+        'design': r.get('design'),
+        'aspect_ratio': r.get('aspect_ratio'),
+    } for r in rows]
+
+class GallerySeedIn(BaseModel):
+    template_key: str
+    count: int = 3  # how many variations to generate
+    quality: Literal["low", "medium", "high"] = "high"
+
+@api_router.post("/admin/ai/gallery/seed")
+async def admin_ai_gallery_seed(payload: GallerySeedIn, user=Depends(require_admin)):
+    """Süper admin only: bir şablon için galeri seed örnekleri üret.
+    HIGH quality gpt-image-2 ile çoklu DNA varyasyonu — her seed = 1 kredi."""
+    if user.get('role') != 'super_admin':
+        raise HTTPException(403, "Sadece süper admin galeriye seed ekleyebilir")
+    if payload.template_key not in ai_media.TEMPLATES:
+        raise HTTPException(400, "Geçersiz şablon")
+    n = max(1, min(payload.count, 6))
+    sub = await _ensure_subscription_doc()
+    if int(sub.get('credit_balance', 0)) < n:
+        raise HTTPException(402, f"Kredi yetersiz: {n} kredi gerekli, bakiye {sub.get('credit_balance', 0)}")
+    for _ in range(n):
+        await consume_credit(1, note=f"Gallery seed: {payload.template_key}")
+    # Sample context per template — generic placeholder data so visuals are universal
+    sample_ctx = {
+        'match_week':   {'home_name': 'TEAM A', 'away_name': 'TEAM B', 'date_str': '15.06.2026', 'time_str': '19:00', 'stadium': 'CITY STADIUM', 'league_display': 'PRO LEAGUE'},
+        'match_day':    {'home_name': 'TEAM A', 'away_name': 'TEAM B', 'date_str': '15.06.2026', 'time_str': '19:00', 'stadium': 'CITY STADIUM', 'league_display': 'PRO LEAGUE'},
+        'lineup':       {'players': [{'name': f'PLAYER {i+1}', 'jersey_number': i+1, 'position': ['GK','DEF','MID','FW'][i % 4]} for i in range(11)], 'formation': '4-3-3', 'home_name': 'OUR CLUB', 'away_name': 'RIVAL'},
+        'full_time':    {'home_name': 'TEAM A', 'away_name': 'TEAM B', 'home_score': 3, 'away_score': 1, 'date_str': '15.06.2026', 'stadium': 'CITY STADIUM', 'league_display': 'PRO LEAGUE'},
+        'motm':         {'player': {'name': 'STAR PLAYER', 'jersey_number': 10, 'position': 'FORWARD'}, 'subtitle': 'WEEK 12', 'match_context': 'TEAM A 3-1 TEAM B'},
+        'birthday':     {'person': {'name': 'PLAYER NAME', 'jersey_number': 7, 'position': 'MIDFIELDER'}, 'turning_age': 25},
+        'special_day':  {'title': '23 NİSAN', 'body_text': 'Ulusal Egemenlik ve Çocuk Bayramı kutlu olsun.', 'occasion_hint': 'resmi bayram'},
+        'new_transfer': {'player': {'name': 'NEW SIGNING', 'jersey_number': 9, 'position': 'STRIKER'}, 'from_club': 'PREVIOUS FC'},
+        'fan_invite':   {'match_text': 'SATURDAY 19:00 HOME', 'message': 'TRİBÜNLERE BEKLİYORUZ!'},
+    }.get(payload.template_key, {})
+    batch_id = new_id()
+    jobs = []
+    for idx in range(n):
+        job = {
+            'id': new_id(),
+            'batch_id': batch_id,
+            'status': 'pending',
+            'template_key': payload.template_key,
+            'context': sample_ctx,
+            'aspect_ratio': None,
+            'quality': payload.quality,
+            'title': f"Gallery seed — {payload.template_key} V{idx+1}",
+            'custom_design': False,
+            'reference_images': [],
+            'variation_index': idx,  # diverse DNA per index
+            'is_gallery_seed': True,
+            'auto_publish_to_gallery': True,  # auto-publish on success
+            'created_by': user.get('id'),
+            'created_at': now_iso(),
+        }
+        await db.ai_media_jobs.insert_one(dict(job))
+        job.pop('_id', None); jobs.append(job)
+        try:
+            mackolik_scheduler.schedule_once(lambda jid=job['id']: _run_ai_job(jid))
+        except Exception:
+            asyncio.create_task(_run_ai_job(job['id']))
+    return {'batch_id': batch_id, 'jobs': jobs, 'count': n}
 
 # Archive list with filters
 @api_router.get("/admin/media-archive")

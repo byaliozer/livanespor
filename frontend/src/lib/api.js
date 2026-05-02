@@ -119,4 +119,9 @@ export const adminApi = {
     // Media archive (Phase 3)
     mediaArchive: (source, limit = 200) => api.get("/admin/media-archive", { params: { source, limit } }).then((r) => r.data),
     mediaSoftDelete: (id) => api.post("/admin/media/soft-delete", { id }).then((r) => r.data),
+    // Gallery (opt-in examples)
+    galleryList: (template_key, limit = 12) => api.get(`/public/ai/gallery`, { params: { template_key, limit } }).then((r) => r.data),
+    galleryPublish: (job_id) => api.post("/admin/ai/gallery/publish", { job_id }).then((r) => r.data),
+    galleryUnpublish: (job_id) => api.post("/admin/ai/gallery/unpublish", { job_id }).then((r) => r.data),
+    gallerySeed: (template_key, count = 3, quality = "high") => api.post("/admin/ai/gallery/seed", { template_key, count, quality }).then((r) => r.data),
 };

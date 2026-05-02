@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { adminApi, API } from "@/lib/api";
 import {
     Wand2, Loader2, Download, RefreshCw, CheckCircle2, XCircle, Clock,
-    Sparkles, Paintbrush, Upload, X, Image as ImageIcon,
+    Sparkles, Paintbrush, Upload, X, Image as ImageIcon, Eye, Star, Plus,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -138,6 +138,9 @@ const AiStudio = () => {
     const [refs, setRefs] = useState({});
     const [submitting, setSubmitting] = useState(false);
     const [jobs, setJobs] = useState([]);
+    // Gallery
+    const [gallery, setGallery] = useState([]);
+    const [seeding, setSeeding] = useState(false);
     const pollRef = useRef(null);
 
     useEffect(() => {
@@ -175,6 +178,10 @@ const AiStudio = () => {
     useEffect(() => {
         setCtx({}); setRefs({}); setTitle("");
         setAspect(active?.aspect_ratio || "1:1");
+        // Load gallery for this template
+        if (active?.key) {
+            adminApi.galleryList(active.key, 12).then(setGallery).catch(() => setGallery([]));
+        }
     }, [activeKey, active]);
 
     const setCtxField = (k, v) => setCtx((c) => ({ ...c, [k]: v }));
@@ -225,6 +232,45 @@ const AiStudio = () => {
 
     const refreshJobs = async () => setJobs(await adminApi.aiJobs(30));
 
+    const applyGalleryDna = (item) => {
+        if (!item?.design) return;
+        setCustomDesign(true);
+        setCustomVals({
+            layout: item.design.layout,
+            typography: item.design.typography,
+            scene: item.design.scene,
+            drama: item.design.drama,
+        });
+        toast.success("DNA uygulandı — formu doldurup üret'e basın");
+    };
+
+    const togglePublish = async (job) => {
+        try {
+            if (job.published_to_gallery) {
+                await adminApi.galleryUnpublish(job.id);
+                toast.success("Galeriden kaldırıldı");
+            } else {
+                await adminApi.galleryPublish(job.id);
+                toast.success("Galeriye eklendi (kulüp bilgisi gizlenir)");
+            }
+            await refreshJobs();
+            if (active?.key) setGallery(await adminApi.galleryList(active.key, 12));
+        } catch (e) { toast.error("İşlem başarısız: " + (e?.response?.data?.detail || e.message)); }
+    };
+
+    const seedGallery = async () => {
+        if (!active) return;
+        if (!window.confirm(`${active.name} için 3 yüksek kaliteli galeri örneği üretilecek (3 kredi). Onaylıyor musunuz?`)) return;
+        setSeeding(true);
+        try {
+            const res = await adminApi.gallerySeed(active.key, 3, "high");
+            setJobs((prev) => [...(res.jobs || []), ...prev].slice(0, 50));
+            toast.success(`${res.count} galeri seed üretimi başlatıldı (HIGH kalite)`);
+        } catch (e) {
+            toast.error("Seed başarısız: " + (e?.response?.data?.detail || e.message));
+        } finally { setSeeding(false); }
+    };
+
     const needsPlayer = active?.required_inputs.includes("player_id");
     const needsPlayers = active?.required_inputs.includes("players");
     const needsMatch = active?.required_inputs.some((r) => ["home_name", "away_name", "home_score", "away_score"].includes(r));
@@ -254,6 +300,43 @@ const AiStudio = () => {
             </div>
 
             {active && (
+                <>
+                {/* Gallery — örnek tasarımlar */}
+                <div className="bg-liv-card border border-liv-border p-6" data-testid="gallery-panel">
+                    <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                        <div>
+                            <h3 className="font-display text-2xl uppercase inline-flex items-center gap-2"><Eye className="w-5 h-5 text-liv-yellow" /> Örnek Tasarımlar — {active.name}</h3>
+                            <p className="text-[11px] text-neutral-500 mt-0.5">Bu şablonun farklı Design DNA'larıyla üretilmiş yüksek kaliteli örnekleri. Beğendiğin DNA'yı tek tıkla kullan.</p>
+                        </div>
+                        <button onClick={seedGallery} disabled={seeding} className="btn-secondary !py-2 !px-3 !text-xs inline-flex items-center gap-1.5 disabled:opacity-60" data-testid="gallery-seed-btn">
+                            {seeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} Galeriye 3 Örnek Ekle (3 kredi · HIGH)
+                        </button>
+                    </div>
+                    {gallery.length === 0 ? (
+                        <div className="text-sm text-neutral-500 py-8 text-center border border-dashed border-liv-border">
+                            Bu şablon için henüz galeri örneği yok.<br />
+                            <span className="text-xs">Üst sağdan "Galeriye 3 Örnek Ekle" diyerek HIGH kalitede seed üretebilir, ya da kendi başarılı işlerinizden ekleyebilirsiniz.</span>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3" data-testid="gallery-grid">
+                            {gallery.map((g) => (
+                                <div key={g.id} className="group relative bg-black border border-liv-border overflow-hidden" data-testid={`gallery-item-${g.id}`}>
+                                    <img src={mediaAbsUrl(g.public_url)} alt={g.template_key} className="w-full aspect-square object-cover" loading="lazy" />
+                                    {g.design && (
+                                        <div className="absolute bottom-0 left-0 right-0 bg-black/85 px-2 py-1.5 text-[9px] text-neutral-300">
+                                            {g.design.layout} · {g.design.scene} · {g.design.typography} · D{g.design.drama}
+                                        </div>
+                                    )}
+                                    <button onClick={() => applyGalleryDna(g)} data-testid={`gallery-use-${g.id}`}
+                                        className="absolute inset-x-0 top-0 bg-liv-yellow text-black text-[10px] font-bold uppercase tracking-widest py-1.5 opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center justify-center gap-1">
+                                        <Star className="w-3 h-3" /> Bu DNA'yı Kullan
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Left: dynamic form */}
                     <div className="lg:col-span-2 space-y-4" data-testid="template-form">
@@ -471,7 +554,13 @@ const AiStudio = () => {
                                                     {j.design.layout} · {j.design.scene} · {j.design.typography} · drama {j.design.drama}
                                                 </div>
                                             )}
-                                            <a href={mediaAbsUrl(j.public_url)} download className="mt-2 text-xs text-liv-yellow hover:underline inline-flex items-center gap-1"><Download className="w-3 h-3" /> İndir</a>
+                                            <div className="flex items-center justify-between mt-2 gap-2">
+                                                <a href={mediaAbsUrl(j.public_url)} download className="text-xs text-liv-yellow hover:underline inline-flex items-center gap-1"><Download className="w-3 h-3" /> İndir</a>
+                                                <button onClick={() => togglePublish(j)} data-testid={`gallery-toggle-${j.id}`}
+                                                    className={`text-[10px] uppercase tracking-widest px-2 py-1 border inline-flex items-center gap-1 ${j.published_to_gallery ? "bg-liv-yellow text-black border-liv-yellow" : "border-liv-border text-neutral-300 hover:border-liv-yellow"}`}>
+                                                    <Star className="w-3 h-3" /> {j.published_to_gallery ? "Galeride" : "Galeriye Ekle"}
+                                                </button>
+                                            </div>
                                         </div>
                                     )}
                                     {j.status === "error" && (
@@ -487,6 +576,7 @@ const AiStudio = () => {
                         </div>
                     </div>
                 </div>
+                </>
             )}
         </div>
     );

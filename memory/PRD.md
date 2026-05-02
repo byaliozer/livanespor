@@ -219,6 +219,32 @@ Bursa Nilüfer merkezli Livanespor için WordPress'ten bağımsız, modern, prem
 - Gerçek multi-tenant izolasyon (tüm koleksiyonlar tenant-keyed).
 - Team Photos için Object Storage migration (şu an base64 upload).
 
+## 5g. 2026-05-02 — Önizleme Galerisi + Object Storage Migration
+
+### Object Storage Migration (Team Photos & manuel upload'lar)
+- `POST /api/admin/media/upload` artık base64 → Object Storage push ediyor; DB'de sadece `public_url` + `storage_path` saklanıyor (önceden `data_url` base64 stored). Storage erişilemezse base64 fallback.
+- `purpose` field eklendi: `team_photo`, `upload`, `logo` etc. Storage path'i `livanespor/team_photo/202605/{uuid}.png` gibi prefix'lenir.
+- `CrudPage.ImageField` upload'u backend'e yönlendiriyor → `public_url` döner; tablolarda absolute URL render edilir (`absUrl()` helper).
+- Team Photos artık Object Storage'da. MongoDB hafif kalır, CDN-grade serve.
+
+### Önizleme Galerisi (Phase 2.1)
+- **Backend:**
+  - `media` ve `ai_media_jobs` doc'larına `published_to_gallery: bool` + `gallery_template_key` field'ları.
+  - `POST /api/admin/ai/gallery/publish` ve `unpublish` — kullanıcı opt-in.
+  - `GET /api/public/ai/gallery?template_key=...&limit=12` — **no-auth endpoint** (anonim örnekler), `id`, `public_url`, `template_key`, `design`, `aspect_ratio` döner. Kulüp adı/logosu gizli.
+  - `POST /api/admin/ai/gallery/seed` — sadece **super_admin**: bir şablon için N (max 6) gallery seed üretir. Generic placeholder context (`TEAM A vs TEAM B`, `PLAYER NAME`) kullanır → çıktılar evrensel. Auto-publish.
+  - `_run_ai_job` success branch'inde `cur.auto_publish_to_gallery=True` ise media+job otomatik galeride.
+- **Frontend (AiStudio.jsx):**
+  - Yeni "Örnek Tasarımlar — {şablon adı}" panel — şablon değişince galeri auto-load.
+  - Galeri grid (2-6 kolon responsive), her kart hover'da **"Bu DNA'yı Kullan"** overlay → Design Customizer'a layout/scene/typography/drama otomatik yüklenir.
+  - "Galeriye 3 Örnek Ekle (3 kredi · HIGH)" butonu (super_admin) — şablon seçildikten sonra gerçek gpt-image-2 HIGH quality seed üretir.
+  - Job kartlarında "Galeriye Ekle / Galeride" toggle butonu (her başarılı kullanıcı işi opt-in).
+- **Test:**
+  - Gerçek HIGH quality seed başarıyla üretildi → 3 farklı DNA (asymmetric/city/heritage·D1, editorial/low_angle/athletic·D2, editorial/abstract/editorial·D3). Public gallery endpoint anonimleştirilmiş 3 öğe döndü.
+  - Manual publish/unpublish test edildi → 200 OK, gallery durumu doğru toggle oldu.
+  - Non-success job publish denemesi → 400 (sadece success işler eklenebilir).
+  - Frontend smoke screenshot: 3 yüksek kaliteli görsel + DNA etiketleri + butonlar render edildi.
+
 ## 6. Backlog
 ### P1 (next iteration)
 - **Refactor monolith:** server.py (~1700) + ai_media.py (611) → `/app/backend/routes/` + `services/` + `design_dna.py`.
