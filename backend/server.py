@@ -857,7 +857,7 @@ async def _run_ai_job(job_id: str):
 async def admin_ai_generate_template(payload: AiTemplateIn, user=Depends(require_admin)):
     if payload.template_key not in ai_media.TEMPLATES:
         raise HTTPException(400, "Geçersiz şablon anahtarı")
-    # Credit check + consume up-front (refund on failure)
+    # Credit check + consume up-front (only after template key validated)
     if not await consume_credit(1, note=f"AI template: {payload.template_key}"):
         raise HTTPException(402, "Kredi yetersiz. PAKETİM ekranından paketinizi yükseltin.")
     job = {

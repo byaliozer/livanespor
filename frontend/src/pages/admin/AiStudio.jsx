@@ -149,7 +149,7 @@ const AiStudio = () => {
                                 <label className="liv-label">Oyuncu</label>
                                 <select className="liv-input" value={ctx.player_id || ""} onChange={(e) => setCtxField("player_id", e.target.value)} data-testid="field-player">
                                     <option value="">— Seçin —</option>
-                                    {players.map((p) => <option key={p.id} value={p.id}>#{p.jersey_number} · {p.name} ({p.position})</option>)}
+                                    {players.map((p) => <option key={p.id} value={p.id}>{`#${p.jersey_number} · ${p.name} (${p.position})`}</option>)}
                                 </select>
                             </div>
                         )}
@@ -158,7 +158,7 @@ const AiStudio = () => {
                             <div>
                                 <label className="liv-label">İlk 11 Oyuncuları (en az 1, max 11)</label>
                                 <select multiple className="liv-input !h-40" value={ctx.player_ids || []} onChange={(e) => setCtxField("player_ids", Array.from(e.target.selectedOptions).map((o) => o.value).slice(0, 11))} data-testid="field-players">
-                                    {players.map((p) => <option key={p.id} value={p.id}>#{p.jersey_number} · {p.name} ({p.position})</option>)}
+                                    {players.map((p) => <option key={p.id} value={p.id}>{`#${p.jersey_number} · ${p.name} (${p.position})`}</option>)}
                                 </select>
                                 <div className="text-[10px] text-neutral-500 mt-1">Ctrl/Cmd tuşuyla çoklu seç ({(ctx.player_ids || []).length} seçili)</div>
                             </div>
@@ -194,7 +194,7 @@ const AiStudio = () => {
                                     }
                                 }} data-testid="field-match">
                                     <option value="">— Elle gir —</option>
-                                    {matches.map((m) => <option key={m.id} value={m.id}>{(m.match_date || "").slice(0, 10)} · {m.home_team} vs {m.away_team} ({m.status})</option>)}
+                                    {matches.map((m) => <option key={m.id} value={m.id}>{`${(m.match_date || "").slice(0, 10)} · ${m.home_team} vs ${m.away_team} (${m.status})`}</option>)}
                                 </select>
                                 <div className="grid grid-cols-2 gap-3 mt-3">
                                     <div><label className="liv-label">Ev Sahibi</label><input className="liv-input" value={ctx.home_team || ""} onChange={(e) => setCtxField("home_team", e.target.value)} /></div>

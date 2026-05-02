@@ -135,14 +135,54 @@ Bursa Nilüfer merkezli Livanespor için WordPress'ten bağımsız, modern, prem
 - Apply `primary_color / secondary_color / bg_color / default_theme` to the public site CSS (currently persisted only).
 - Split `server.py` into routers/services before Phase 2.
 
+## 5e. 2026-05-02 — DR AI Futbol Merger **Phase 2: AI Media Studio + Phase 3: Archive**
+
+### Backend
+- New `storage.py` — Emergent Object Storage wrapper (`init_storage`, `put_bytes`, `get_bytes`, `new_path`), auto re-init on 403.
+- New `ai_media.py` — 8 template prompt builders: `match_day`, `starting_xi`, `match_result`, `goal`, `birthday`, `new_transfer`, `player_of_week`, `fan_invite`. English→English adapter (player fields already English; no translation needed vs DR AI's Turkish schema).
+- New endpoints:
+  - `GET /api/admin/ai/templates` — metadata list.
+  - `POST /api/admin/ai/generate-template` — validates template_key, **then** consumes 1 credit, creates `ai_media_jobs` doc (status=pending), schedules one-shot worker via APScheduler.
+  - `GET /api/admin/ai/jobs` + `/jobs/{id}` — polling endpoints.
+  - `_run_ai_job()` worker — resolves ctx (player_id → player doc, match_id → match doc, player_ids → ordered list), builds prompt, calls `gpt-image-2` (fallback `gpt-image-1`), uploads PNG to Object Storage, persists `media` row with `source=ai_template` + `public_url` + `storage_path`, updates job.
+  - `GET /api/public/media/{path:path}` — **no-auth** proxy; fetches from Object Storage and returns bytes with `Cache-Control: public, max-age=86400`. DB enforces `is_deleted` filter.
+  - `GET /api/admin/media-archive?source=...&limit=...` — filters soft-deleted rows, max 500.
+  - `POST /api/admin/media/soft-delete` — marks `is_deleted=true` (storage has no delete API).
+- Legacy `POST /admin/ai/generate-image` now: consumes credit, uploads to Object Storage, returns `public_url`.
+- `_enforce_media_cap(500)` called after every media insert — soft-deletes oldest rows (reason `archive_cap`).
+- `mackolik_scheduler.schedule_once(coro_factory)` — fixed to use `asyncio.run_coroutine_threadsafe` so AsyncIOScheduler correctly runs coroutines against the main event loop.
+- Startup now also calls `object_storage.init_storage()` (Emergent LLM key reused).
+
+### Frontend
+- New `/admin/ai-studio` (`AiStudio.jsx`) — 8 template pills, dynamic form per template (player picker, match selector auto-fill, formation/opponent, minute, scorers CSV, fan invite text/message, stats JSON), aspect+quality selectors, "Üretimi Başlat (1 kredi)" submit. Right "İşler" panel auto-polls every 3s while pending/processing jobs exist; success jobs show image preview + download from `public_url`.
+- `/admin/media` **Arşiv** rewritten — filter pills (Tümü / Yüklemeler / AI Prompt / AI Şablon) with counts, `X/500` header, soft-delete confirmation, loads from `public_url` → direct object-storage-backed render.
+- Sidebar split into "AI Görsel (Prompt)" + "AI Stüdyo (Şablonlar)".
+- Dashboard quick action updated to route to AI Stüdyo.
+- `api.js` — new `aiTemplates/aiGenerateTemplate/aiJobs/aiJob/mediaArchive/mediaSoftDelete` helpers.
+
+### Tests
+- `/app/backend/tests/test_phase2_ai_media.py` — 12 new tests (templates list, job creation, credit deduction, 402 insufficient, full round-trip with real `gpt-image-2`, public media proxy, 404, archive filter, soft-delete, cap wiring).
+- Regression: 45/45 (Phase 1 12 + backend_test 33 after `TestAIImage` updated to accept new `public_url` shape).
+- Frontend E2E: all 8 template pills, dynamic forms, jobs polling, archive filters, sidebar split, paketim credit reflection.
+- **Result: 57/57 backend passing, frontend 100%.** Minor fixes applied: template_key validation already precedes credit consume; `<option>` children wrapped as single string expression to silence React warning.
+
+### Known follow-ups (tracked in § 6)
+- Refund credit if `_run_ai_job` status=error (currently debit stays).
+- ETag / Surrogate-Control on `/public/media/*` for CDN-grade caching.
+- `_enforce_media_cap` should prefer trimming `source=ai` over `source=upload` (preserve curated uploads).
+- Per-plan media cap (currently 500 hard-coded in Media.jsx).
+- Protect `public_url` path with `mediaUrl()` URL parsing (currently regex-strips `/api`).
+- Split `server.py` (~1520 lines) into `/app/backend/routes/` modules.
+
 ## 6. Backlog
 ### P1 (next iteration)
-- **Phase 2: AI Media Generator** — 8 templates (Maç Günü, İlk 11, Gol, Doğum Günü vs.), gpt-image-2 via Emergent LLM key, Pillow fallback, APScheduler async polling, wire `consume_credit()` into AI endpoint.
-- **Phase 3: Media Archive** — Emergent object storage, archive page 500-item cap, download/share buttons.
-- Apply Settings theme colors (primary/secondary/bg + default_theme) to public site CSS layer.
-- Refactor `server.py` (~1280 lines) into `/app/backend/routes/` + `services/` modules before Phase 2.
-- Schema validation for site_settings (#RRGGBB regex, theme enum).
-- Multi-tenant: subscription doc tenant-keyed (currently singleton `id='main'`).
+- **Credit refund on failed AI jobs** — `_run_ai_job` status=error should refund the 1 credit.
+- **Apply site theme** (primary/secondary/bg + default_theme) to public site CSS layer.
+- **Refactor `server.py`** (~1520 lines) → `/app/backend/routes/` + `services/` modules.
+- **Schema validation** for site_settings (#RRGGBB regex, theme enum).
+- **Multi-tenant**: subscription doc tenant-keyed (currently singleton `id='main'`).
+- **Per-plan media cap** (currently hard-coded 500) + protect `upload` source during trim.
+- **ETag / CDN caching** on `/public/media/*` for reduced Object Storage egress.
 - WYSIWYG rich text editor (TinyMCE/Lexical) for haber içerikleri
 - Image upload via media picker bound to player/post/sponsor forms (currently URL-based)
 - Sitemap.xml + robots.txt auto-generated
