@@ -2,7 +2,7 @@ import CrudPage from "@/components/admin/CrudPage";
 
 const fields = [
     { name: "title", label: "Başlık", required: true },
-    { name: "photo_url", label: "Fotoğraf", type: "image", fullWidth: true, required: true },
+    { name: "photo_url", label: "Fotoğraf", type: "image", purpose: "team_photo", fullWidth: true, required: true },
     { name: "category", label: "Kategori", type: "select", options: [
         { value: "team", label: "Takım Fotosu" },
         { value: "stadium", label: "Stadyum/Tesis" },

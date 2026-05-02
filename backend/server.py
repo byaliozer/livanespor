@@ -1100,20 +1100,46 @@ async def public_media(path: str):
         raise HTTPException(502, f"Depolama hatası: {e}")
     return Response(content=data, media_type=ctype or "image/png", headers={"Cache-Control": "public, max-age=86400"})
 
-# Media library — accept base64 uploads from frontend
+# Media library — base64 upload, persisted to Object Storage with public URL
 class MediaUploadIn(BaseModel):
     title: str
     data_url: str  # data:image/...;base64,...
     type: str = "image"
+    purpose: Optional[str] = "upload"  # 'upload' | 'team_photo' | 'logo' | etc.
 
 @api_router.post("/admin/media/upload")
 async def admin_media_upload(payload: MediaUploadIn, user=Depends(require_admin)):
-    return await _create('media', {
+    """Persist a base64 data-URL image to Object Storage and return a public_url.
+    Falls back to keeping data_url in DB if storage fails."""
+    public_url = None
+    storage_path = None
+    try:
+        if not payload.data_url.startswith("data:image"):
+            raise ValueError("data_url must be a data:image/* URL")
+        header, b64 = payload.data_url.split(",", 1)
+        # Detect extension from MIME
+        ext = "png"
+        if "image/jpeg" in header or "image/jpg" in header: ext = "jpg"
+        elif "image/webp" in header: ext = "webp"
+        png = base64.b64decode(b64)
+        sp = object_storage.new_path(payload.purpose or "upload", ext)
+        r = await object_storage.put_bytes(sp, png, header.split(";")[0].replace("data:", "") or "image/png")
+        storage_path = r.get("path", sp)
+        public_url = f"/api/public/media/{storage_path}"
+    except Exception as e:
+        logger.warning(f"Storage upload (manual) failed, keeping base64: {e}")
+
+    media = await _create('media', {
         'title': payload.title,
         'type': payload.type,
         'source': 'upload',
-        'data_url': payload.data_url,
+        'storage_path': storage_path,
+        'public_url': public_url,
+        'data_url': None if public_url else payload.data_url,
+        'is_deleted': False,
     })
+    await _enforce_media_cap(await _current_media_cap())
+    return {**media, 'public_url': public_url, 'storage_path': storage_path}
 
 # ─────────────────────────── Subscription Packages ───────────────────────────
 PLAN_LIMITS = {

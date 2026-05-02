@@ -1,30 +1,46 @@
 import { useEffect, useRef, useState } from "react";
-import { adminApi } from "@/lib/api";
+import { adminApi, API } from "@/lib/api";
 import { Plus, Edit2, Trash2, X, Save, Search, ImageIcon, Upload, Trash } from "lucide-react";
 import { toast } from "sonner";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
 
-const ImageField = ({ value, onChange, testid }) => {
+// Convert /api/public/media/... → absolute, leave data: and http(s) untouched
+const absUrl = (v) => {
+    if (!v) return "";
+    if (v.startsWith("data:") || v.startsWith("http")) return v;
+    try { return `${new URL(API).origin}${v}`; } catch { return v; }
+};
+
+const ImageField = ({ value, onChange, testid, purpose = "upload" }) => {
     const fileRef = useRef(null);
     const [busy, setBusy] = useState(false);
 
     const handleFile = (file) => {
         if (!file) return;
-        if (!file.type.startsWith("image/")) {
-            toast.error("Sadece resim dosyası yüklenebilir");
-            return;
-        }
-        if (file.size > MAX_IMAGE_BYTES) {
-            toast.error("Dosya 5 MB'dan büyük olamaz");
-            return;
-        }
+        if (!file.type.startsWith("image/")) { toast.error("Sadece resim dosyası yüklenebilir"); return; }
+        if (file.size > MAX_IMAGE_BYTES) { toast.error("Dosya 5 MB'dan büyük olamaz"); return; }
         setBusy(true);
         const reader = new FileReader();
-        reader.onload = () => {
-            onChange(reader.result);
-            setBusy(false);
-            toast.success("Resim hazır — kaydet'e basın");
+        reader.onload = async () => {
+            try {
+                // Upload to Object Storage via backend → get public_url
+                const res = await adminApi.uploadMedia({
+                    title: file.name,
+                    data_url: reader.result,
+                    purpose,
+                });
+                if (res.public_url) {
+                    onChange(res.public_url);  // /api/public/media/...
+                    toast.success("Yüklendi (Object Storage)");
+                } else {
+                    // Fallback: storage failed, keep base64
+                    onChange(reader.result);
+                    toast.warning("Object Storage erişilemedi — base64 kullanılıyor");
+                }
+            } catch (e) {
+                toast.error("Yüklenemedi: " + (e?.response?.data?.detail || e.message));
+            } finally { setBusy(false); }
         };
         reader.onerror = () => { setBusy(false); toast.error("Dosya okunamadı"); };
         reader.readAsDataURL(file);
@@ -34,7 +50,7 @@ const ImageField = ({ value, onChange, testid }) => {
         <div className="space-y-3" data-testid={testid}>
             {value ? (
                 <div className="relative inline-block">
-                    <img src={value} alt="Yüklenen" className="w-32 h-32 object-cover border border-liv-border" />
+                    <img src={absUrl(value)} alt="Yüklenen" className="w-32 h-32 object-cover border border-liv-border" />
                     <button
                         type="button"
                         onClick={() => onChange("")}
@@ -178,7 +194,7 @@ const CrudPage = ({
                                             {c.render ? c.render(row) : (() => {
                                                 const v = row[c.key];
                                                 if (c.key === "photo_url" || c.key === "logo_url" || c.key === "cover_image" || c.key === "image_url") {
-                                                    return v ? <img src={v} alt="" className="w-12 h-12 object-cover" /> : <ImageIcon className="w-5 h-5 text-neutral-600" />;
+                                                    return v ? <img src={absUrl(v)} alt="" className="w-12 h-12 object-cover" /> : <ImageIcon className="w-5 h-5 text-neutral-600" />;
                                                 }
                                                 if (typeof v === "boolean") return v ? "✓" : "—";
                                                 if (typeof v === "object" && v !== null) return JSON.stringify(v).slice(0, 60);
@@ -223,7 +239,7 @@ const CrudPage = ({
                                     ) : f.type === "json" ? (
                                         <textarea rows={4} value={typeof editing[f.name] === "string" ? editing[f.name] : JSON.stringify(editing[f.name] ?? {}, null, 2)} onChange={(e) => setEditing({ ...editing, [f.name]: e.target.value })} className="liv-input font-mono text-xs" />
                                     ) : f.type === "image" ? (
-                                        <ImageField value={editing[f.name] ?? ""} onChange={(v) => setEditing({ ...editing, [f.name]: v })} testid={`crud-image-${f.name}`} />
+                                        <ImageField value={editing[f.name] ?? ""} onChange={(v) => setEditing({ ...editing, [f.name]: v })} testid={`crud-image-${f.name}`} purpose={f.purpose || "upload"} />
                                     ) : (
                                         <input type={f.type || "text"} value={editing[f.name] ?? ""} onChange={(e) => setEditing({ ...editing, [f.name]: e.target.value })} className="liv-input" placeholder={f.placeholder} />
                                     )}
