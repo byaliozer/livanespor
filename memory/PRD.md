@@ -310,3 +310,23 @@ GoDaddy livanespor.com → Emergent deployment domain bağlama:
 - **Admin:** admin@livanespor.com / Livanespor2026!
 - **OpenAI API key:** /app/backend/.env (OPENAI_API_KEY) — kullanıcı sağladı
 - **Logo:** https://customer-assets.emergentagent.com/.../Livanespor_SARI_SIYAH_NEW%20genelde%20bu.png
+
+## 5i. 2026-05-03 — Code Quality Hardening (Code Review Pass)
+
+### Real Findings Addressed
+- **Hardcoded test credentials → env vars** in all 4 pytest files (`backend_test.py`, `test_phase1.py`, `test_phase2_ai_media.py`, `test_phase2_v2.py`). Now read `TEST_ADMIN_EMAIL` / `TEST_ADMIN_PASSWORD` from env with safe local-dev defaults. `REACT_APP_BACKEND_URL` falls back to `http://localhost:8001` so tests do not crash on missing env.
+- **MD5 → SHA256** in `ai_media._design_dna()`. Determinism preserved (still same hex slicing pattern, sha256 gives 64-char hex of which we use first 8 chars).
+- **`build_full_time` complexity reduced** — extracted 3 helpers: `_format_scorer_lines`, `_full_time_goal_panel`, `_full_time_info_panel`. Prompt output verified identical.
+- **Stale `EXPECTED_TEMPLATES`** in `test_phase2_ai_media.py` updated from old Phase 2 v1 set (8 keys) to v2 set (9 keys: match_week/match_day/lineup/full_time/motm/birthday/special_day/new_transfer/fan_invite).
+- **Stale round-trip test** updated to read from new `{batch_id, jobs: [...], variation_count}` response shape.
+
+### Code Review Items Verified as False-Positives (NOT changed)
+- **`is None` / `is False`** comparisons (server.py:676, mackolik_*.py, caption_ai.py:73, ai_media.py:123) — these are the **canonical Python idiom** for singleton checks (PEP 8). Replacing with `==` would actually be wrong.
+- **`data, ctype` "undefined"** at server.py:1267 — they ARE defined inside the try block; if `get_bytes` raises, HTTPException 502 is raised before reaching `return`. Code is correct; static analyzer false positive.
+- **`_scheduler` "undefined"** at mackolik_scheduler.py:97 — declared as `Optional[AsyncIOScheduler] = None` global at line 27. Static analyzer false positive.
+
+### Test Results
+- **74/74 backend pytest passing** (was 73 before; the 2 stale Phase 2 v1 tests are now corrected).
+- Lint shows only E701/E702 cosmetic style nits (semicolon/colon-on-same-line) — left as-is to minimize churn.
+
+

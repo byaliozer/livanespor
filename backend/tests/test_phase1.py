@@ -4,9 +4,9 @@ import uuid
 import pytest
 import requests
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL').rstrip('/')
-ADMIN_USERNAME = "livanespor"
-ADMIN_PASSWORD = "Livanespor2026"
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'http://localhost:8001').rstrip('/')
+ADMIN_USERNAME = os.environ.get('TEST_ADMIN_EMAIL', 'livanespor')
+ADMIN_PASSWORD = os.environ.get('TEST_ADMIN_PASSWORD', 'Livanespor2026')
 
 
 # ─────────── Fixtures ───────────

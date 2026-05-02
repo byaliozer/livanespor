@@ -4,13 +4,13 @@ import time
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL").rstrip("/")
-ADMIN_USERNAME = "livanespor"
-ADMIN_PASSWORD = "Livanespor2026"
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "http://localhost:8001").rstrip("/")
+ADMIN_USERNAME = os.environ.get("TEST_ADMIN_EMAIL", "livanespor")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "Livanespor2026")
 
 EXPECTED_TEMPLATES = {
-    "match_day", "starting_xi", "match_result", "goal",
-    "birthday", "new_transfer", "player_of_week", "fan_invite",
+    "match_week", "match_day", "lineup", "full_time", "motm",
+    "birthday", "special_day", "new_transfer", "fan_invite",
 }
 
 
@@ -60,7 +60,7 @@ def _set_credits_to(admin_client, amount: int):
 
 # ─────────── AI Templates catalog ───────────
 class TestAITemplatesCatalog:
-    def test_templates_list_has_8(self, admin_client):
+    def test_templates_list_has_9(self, admin_client):
         r = admin_client.get(f"{BASE_URL}/api/admin/ai/templates", timeout=10)
         assert r.status_code == 200, r.text
         rows = r.json()
@@ -161,7 +161,11 @@ class TestTemplateRoundTrip:
             f"{BASE_URL}/api/admin/ai/generate-template", json=payload, timeout=30
         )
         assert r.status_code == 200, r.text
-        job = r.json()
+        body = r.json()
+        # Phase 2 v2 response shape: batch with jobs[]
+        assert "batch_id" in body and "jobs" in body
+        assert len(body["jobs"]) >= 1
+        job = body["jobs"][0]
         assert job["status"] == "pending"
         assert "id" in job
         job_id = job["id"]

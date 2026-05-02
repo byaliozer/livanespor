@@ -87,7 +87,7 @@ THEME_DESC = {
 
 # ───────────────────────── DNA Resolver ─────────────────────────
 def _design_dna(seed: str, variation_index: int = 0) -> dict:
-    h = hashlib.md5(f"{seed}:{variation_index}".encode()).hexdigest()
+    h = hashlib.sha256(f"{seed}:{variation_index}".encode()).hexdigest()
     layouts = list(LAYOUT_RECIPES.keys())
     scenes = list(SCENE_DESCRIPTIONS.keys())
     typographies = list(TYPOGRAPHY_DESCRIPTIONS.keys())
@@ -259,24 +259,66 @@ def build_match_week(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple
     return p, f"Maç Haftası — {ctx.get('home_name','?')} vs {ctx.get('away_name','?')}"
 
 
+def _full_time_goal_panel(home: str, away: str, hgl: list, agl: list) -> list[str]:
+    return [
+        "• GOL ATANLAR PANEL — semi-transparent dark rounded rectangle, two columns:",
+        "  - Title centered: \"GOLLERİ ATANLAR\" (uppercase, accent color).",
+        f"  - LEFT header: \"{home.upper()}\", lines: " + (" | ".join(f'"{g}"' for g in hgl) if hgl else '"—"') + ".",
+        f"  - RIGHT header: \"{away.upper()}\", lines: " + (" | ".join(f'"{g}"' for g in agl) if agl else '"—"') + ".",
+    ]
+
+
+def _format_scorer_lines(goals: list) -> list:
+    out = []
+    for g in goals or []:
+        n = (g or {}).get("player_name") or ""
+        m = (g or {}).get("minute")
+        if not n:
+            continue
+        if m not in (None, "", 0):
+            out.append(f"{n.upper()} {int(m)}'")
+        else:
+            out.append(n.upper())
+    return out
+
+
+def _full_time_info_panel(date: str, time_: str, stadium: str) -> list[str]:
+    lines = ["• BOTTOM INFO PANEL — three columns:"]
+    if date:
+        lines.append(f"  - \"TARİH\": \"{date}\".")
+    if time_:
+        lines.append(f"  - \"SAAT\":  \"{time_}\".")
+    if stadium:
+        lines.append(f"  - \"STAT\":  \"{stadium.upper()}\".")
+    return lines
+
+
 def build_full_time(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple[str, str]:
     home = ctx.get("home_name", "HOME")
     away = ctx.get("away_name", "AWAY")
-    hs = ctx.get("home_score", 0); as_ = ctx.get("away_score", 0)
+    hs = ctx.get("home_score", 0)
+    as_ = ctx.get("away_score", 0)
     score_type = ctx.get("score_type", "normal")
-    stadium = ctx.get("stadium", ""); date = ctx.get("date_str", ""); time_ = ctx.get("time_str", "")
-    league = ctx.get("league_display", ""); theme = ctx.get("theme", "dramatik")
+    stadium = ctx.get("stadium", "")
+    date = ctx.get("date_str", "")
+    time_ = ctx.get("time_str", "")
+    league = ctx.get("league_display", "")
+    theme = ctx.get("theme", "dramatik")
     show_goals = bool(ctx.get("show_goals"))
-    home_goals = ctx.get("home_goals") or []; away_goals = ctx.get("away_goals") or []
+    home_goals = ctx.get("home_goals") or []
+    away_goals = ctx.get("away_goals") or []
     team_photo = ctx.get("team_photo_provided", False)
-    primary = s.get("primary_color") or "#f5dc4c"; secondary = s.get("secondary_color") or "#ffffff"
+    primary = s.get("primary_color") or "#f5dc4c"
+    secondary = s.get("secondary_color") or "#ffffff"
     bg = s.get("bg_color") or "#0b0b0b"
     website = s.get("website") or s.get("site_url")
     instagram = s.get("instagram_username") or (s.get("social") or {}).get("instagram")
 
     pen = " (Penaltılar sonucu)" if str(score_type).lower() == "penalty" else ""
-    parts = ["Create a premium cinematic 1:1 square football FULL TIME result poster.",
-             *_style_header(theme, primary, secondary, bg)]
+    parts = [
+        "Create a premium cinematic 1:1 square football FULL TIME result poster.",
+        *_style_header(theme, primary, secondary, bg),
+    ]
     if team_photo:
         parts.append("The THIRD reference image is the OFFICIAL team squad photo. USE IT AS THE BACKGROUND with a subtle dark overlay; composite crests, score, and panels on top.")
     parts += _design_block(design)
@@ -284,7 +326,8 @@ def build_full_time(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple[
         "LAYOUT:",
         "• Heading text: giant bold Turkish uppercase \"MAÇ SONU\" in accent color.",
     ]
-    if league: parts.append(f"• Subtitle: \"{league}\".")
+    if league:
+        parts.append(f"• Subtitle: \"{league}\".")
     parts += [
         "• MIDDLE — two crests with score between:",
         "  - LEFT crest = FIRST reference image (shape preserved).",
@@ -293,41 +336,28 @@ def build_full_time(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple[
         f"  - Under left crest, uppercase white: \"{home.upper()}\".",
         f"  - Under right crest, uppercase white: \"{away.upper()}\".",
     ]
-    if pen: parts.append(f"• Small line under score: \"{pen.strip()}\".")
+    if pen:
+        parts.append(f"• Small line under score: \"{pen.strip()}\".")
 
-    def _fmt(goals):
-        out = []
-        for g in goals or []:
-            n = (g or {}).get("player_name") or ""
-            m = (g or {}).get("minute")
-            if not n: continue
-            out.append(f"{n.upper()} {int(m)}'" if m not in (None, "", 0) else n.upper())
-        return out
-    hgl = _fmt(home_goals) if show_goals else []
-    agl = _fmt(away_goals) if show_goals else []
+    hgl = _format_scorer_lines(home_goals) if show_goals else []
+    agl = _format_scorer_lines(away_goals) if show_goals else []
     has_goals = bool(hgl or agl)
     if has_goals:
-        parts += [
-            "• GOL ATANLAR PANEL — semi-transparent dark rounded rectangle, two columns:",
-            "  - Title centered: \"GOLLERİ ATANLAR\" (uppercase, accent color).",
-            f"  - LEFT header: \"{home.upper()}\", lines: " + (" | ".join(f'"{g}"' for g in hgl) if hgl else '"—"') + ".",
-            f"  - RIGHT header: \"{away.upper()}\", lines: " + (" | ".join(f'"{g}"' for g in agl) if agl else '"—"') + ".",
-        ]
-    parts.append("• BOTTOM INFO PANEL — three columns:")
-    if date: parts.append(f"  - \"TARİH\": \"{date}\".")
-    if time_: parts.append(f"  - \"SAAT\":  \"{time_}\".")
-    if stadium: parts.append(f"  - \"STAT\":  \"{stadium.upper()}\".")
+        parts += _full_time_goal_panel(home, away, hgl, agl)
+    parts += _full_time_info_panel(date, time_, stadium)
     parts += _footer_lines(website, instagram)
     parts += _typography_rules()
     parts += [
-        "", "STRICT NEGATIVE RULES:",
+        "",
+        "STRICT NEGATIVE RULES:",
         "• NO yellow/red cards, NO referee whistles, NO possession bars, NO statistics or heatmaps.",
         "• NO MVP badges unless requested. NO invented dates/stadium/time.",
     ]
     if not has_goals:
         parts.append("• NO scorer names, NO 'goals scored by' panel — render ONLY the score itself.")
     extra = ctx.get("extra_text")
-    if extra: parts.append(f"\nEMPHASIS TEXT: \"{extra}\".")
+    if extra:
+        parts.append(f"\nEMPHASIS TEXT: \"{extra}\".")
     return "\n".join(parts), f"Maç Sonu — {home} {hs}-{as_} {away}"
 
 
