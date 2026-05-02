@@ -3,8 +3,10 @@ import { adminApi, API } from "@/lib/api";
 import {
     Wand2, Loader2, Download, RefreshCw, CheckCircle2, XCircle, Clock,
     Sparkles, Paintbrush, Upload, X, Image as ImageIcon, Eye, Star, Plus,
+    Maximize2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Lightbox } from "@/components/admin/Lightbox";
 
 // URL helper for public media proxy
 const mediaAbsUrl = (pathOrDataUrl) => {
@@ -141,6 +143,10 @@ const AiStudio = () => {
     // Gallery
     const [gallery, setGallery] = useState([]);
     const [seeding, setSeeding] = useState(false);
+    // Lightbox
+    const [lbOpen, setLbOpen] = useState(false);
+    const [lbItems, setLbItems] = useState([]);
+    const [lbIdx, setLbIdx] = useState(0);
     const pollRef = useRef(null);
 
     useEffect(() => {
@@ -232,6 +238,33 @@ const AiStudio = () => {
 
     const refreshJobs = async () => setJobs(await adminApi.aiJobs(30));
 
+    const openJobLightbox = (job) => {
+        const successJobs = jobs.filter((j) => j.status === "success" && j.public_url);
+        const startIdx = successJobs.findIndex((j) => j.id === job.id);
+        setLbItems(successJobs.map((j) => ({
+            url: mediaAbsUrl(j.public_url),
+            template_key: j.template_key,
+            design: j.design,
+            social_caption: j.social_caption,
+            expecting_caption: !j.social_caption,
+            filename: `${j.template_key}_${j.id.slice(0, 8)}.png`,
+        })));
+        setLbIdx(Math.max(0, startIdx));
+        setLbOpen(true);
+    };
+
+    const openGalleryLightbox = (item) => {
+        const startIdx = gallery.findIndex((g) => g.id === item.id);
+        setLbItems(gallery.map((g) => ({
+            url: mediaAbsUrl(g.public_url),
+            template_key: g.template_key,
+            design: g.design,
+            filename: `${g.template_key}_${g.id.slice(0, 8)}.png`,
+        })));
+        setLbIdx(Math.max(0, startIdx));
+        setLbOpen(true);
+    };
+
     const applyGalleryDna = (item) => {
         if (!item?.design) return;
         setCustomDesign(true);
@@ -320,14 +353,15 @@ const AiStudio = () => {
                     ) : (
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3" data-testid="gallery-grid">
                             {gallery.map((g) => (
-                                <div key={g.id} className="group relative bg-black border border-liv-border overflow-hidden" data-testid={`gallery-item-${g.id}`}>
+                                <div key={g.id} className="group relative bg-black border border-liv-border overflow-hidden cursor-pointer" data-testid={`gallery-item-${g.id}`} onClick={() => openGalleryLightbox(g)}>
                                     <img src={mediaAbsUrl(g.public_url)} alt={g.template_key} className="w-full aspect-square object-cover" loading="lazy" />
                                     {g.design && (
-                                        <div className="absolute bottom-0 left-0 right-0 bg-black/85 px-2 py-1.5 text-[9px] text-neutral-300">
+                                        <div className="absolute bottom-0 left-0 right-0 bg-black/85 px-2 py-1.5 text-[9px] text-neutral-300 pointer-events-none">
                                             {g.design.layout} · {g.design.scene} · {g.design.typography} · D{g.design.drama}
                                         </div>
                                     )}
-                                    <button onClick={() => applyGalleryDna(g)} data-testid={`gallery-use-${g.id}`}
+                                    <div className="absolute top-1.5 right-1.5 w-7 h-7 bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><Maximize2 className="w-3.5 h-3.5 text-white" /></div>
+                                    <button onClick={(e) => { e.stopPropagation(); applyGalleryDna(g); }} data-testid={`gallery-use-${g.id}`}
                                         className="absolute inset-x-0 top-0 bg-liv-yellow text-black text-[10px] font-bold uppercase tracking-widest py-1.5 opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center justify-center gap-1">
                                         <Star className="w-3 h-3" /> Bu DNA'yı Kullan
                                     </button>
@@ -548,11 +582,22 @@ const AiStudio = () => {
                                     </div>
                                     {j.status === "success" && j.public_url && (
                                         <div className="mt-2">
-                                            <img src={mediaAbsUrl(j.public_url)} alt="" className="w-full aspect-square object-cover border border-liv-border" />
+                                            <div className="relative cursor-pointer group/img" onClick={() => openJobLightbox(j)} data-testid={`job-image-${j.id}`}>
+                                                <img src={mediaAbsUrl(j.public_url)} alt="" className="w-full aspect-square object-cover border border-liv-border" />
+                                                <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/40 transition-colors flex items-center justify-center">
+                                                    <Maximize2 className="w-6 h-6 text-white opacity-0 group-hover/img:opacity-100 transition-opacity" />
+                                                </div>
+                                            </div>
                                             {j.design && (
                                                 <div className="text-[9px] text-neutral-500 mt-1">
                                                     {j.design.layout} · {j.design.scene} · {j.design.typography} · drama {j.design.drama}
                                                 </div>
+                                            )}
+                                            {j.social_caption && (
+                                                <div className="text-[10px] text-neutral-400 mt-1 line-clamp-2 italic">{j.social_caption.caption}</div>
+                                            )}
+                                            {!j.social_caption && (
+                                                <div className="text-[9px] text-neutral-500 mt-1 italic">Caption hazırlanıyor…</div>
                                             )}
                                             <div className="flex items-center justify-between mt-2 gap-2">
                                                 <a href={mediaAbsUrl(j.public_url)} download className="text-xs text-liv-yellow hover:underline inline-flex items-center gap-1"><Download className="w-3 h-3" /> İndir</a>
@@ -578,6 +623,7 @@ const AiStudio = () => {
                 </div>
                 </>
             )}
+            <Lightbox open={lbOpen} items={lbItems} activeIndex={lbIdx} onClose={() => setLbOpen(false)} onIndex={setLbIdx} />
         </div>
     );
 };

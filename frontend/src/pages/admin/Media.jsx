@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { adminApi, API } from "@/lib/api";
-import { Trash2, Upload, Download, Filter, Image as ImageIcon, Wand2 } from "lucide-react";
+import { Trash2, Upload, Download, Filter, Image as ImageIcon, Wand2, Maximize2 } from "lucide-react";
 import { toast } from "sonner";
+import { Lightbox } from "@/components/admin/Lightbox";
 
 const SOURCE_LABEL = {
     upload: "Yükleme",
@@ -18,6 +19,18 @@ const Media = () => {
     const [list, setList] = useState([]);
     const [filter, setFilter] = useState("");
     const [loading, setLoading] = useState(true);
+    const [lbOpen, setLbOpen] = useState(false);
+    const [lbIdx, setLbIdx] = useState(0);
+
+    const openLightbox = (idx) => { setLbIdx(idx); setLbOpen(true); };
+
+    const lbItems = list.map((m) => ({
+        url: assetUrl(m),
+        template_key: m.template_key,
+        design: m.design,
+        social_caption: m.social_caption,
+        filename: `${m.title || m.id}.png`,
+    }));
 
     const load = async () => {
         setLoading(true);
@@ -89,12 +102,13 @@ const Media = () => {
             {loading && <div className="text-neutral-400">Yükleniyor…</div>}
 
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                {list.map((m) => {
+                {list.map((m, idx) => {
                     const src = assetUrl(m);
                     return (
                         <div key={m.id} className="bg-liv-card border border-liv-border group relative" data-testid={`media-item-${m.id}`}>
-                            <div className="aspect-square overflow-hidden bg-black">
+                            <div className="aspect-square overflow-hidden bg-black cursor-pointer relative" onClick={() => src && openLightbox(idx)}>
                                 {src ? <img src={src} alt={m.title} className="w-full h-full object-cover" loading="lazy" /> : <div className="w-full h-full flex items-center justify-center text-neutral-600"><ImageIcon className="w-6 h-6" /></div>}
+                                {src && <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center"><Maximize2 className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" /></div>}
                             </div>
                             <div className="p-2">
                                 <div className="text-xs truncate">{m.title}</div>
@@ -112,6 +126,7 @@ const Media = () => {
                 })}
                 {!loading && list.length === 0 && <div className="col-span-2 md:col-span-4 lg:col-span-6 text-center text-neutral-500 py-12">Henüz medya yok.</div>}
             </div>
+            <Lightbox open={lbOpen} items={lbItems} activeIndex={lbIdx} onClose={() => setLbOpen(false)} onIndex={setLbIdx} />
         </div>
     );
 };

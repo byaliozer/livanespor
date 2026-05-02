@@ -533,6 +533,7 @@ import mackolik_sync
 import mackolik_scheduler
 import storage as object_storage
 import ai_media
+import caption_ai
 
 class MackolikSettingsIn(BaseModel):
     macko_team_id: str
@@ -994,6 +995,16 @@ async def _run_ai_job(job_id: str):
                 {'$set': {'published_to_gallery': True, 'gallery_published_at': now_iso()}})
             await db.media.update_one({'id': media['id']},
                 {'$set': {'published_to_gallery': True, 'gallery_template_key': cur['template_key']}})
+        # Generate Instagram caption + hashtags in background (best-effort)
+        try:
+            social = await caption_ai.generate_social_caption(
+                template_key=cur['template_key'], ctx=ctx, site_settings=site,
+            )
+            if social:
+                await db.media.update_one({'id': media['id']}, {'$set': {'social_caption': social}})
+                await db.ai_media_jobs.update_one({'id': job_id}, {'$set': {'social_caption': social}})
+        except Exception as ce:
+            logger.warning(f"Caption generation failed for job {job_id}: {ce}")
     except Exception as e:
         logger.exception(f"AI job {job_id} failed")
         # Refund the 1 credit debited up-front
@@ -1072,6 +1083,52 @@ async def admin_ai_job(job_id: str, user=Depends(require_admin)):
     if not j:
         raise HTTPException(404, "İş bulunamadı")
     return j
+
+# ─────────────────────────── Stale Job Recovery ───────────────────────────
+async def recover_stale_jobs():
+    """Find jobs stuck in 'processing' >5min OR 'pending' >10min — mark error + refund 1 credit each.
+    Runs at boot and periodically (every 3 minutes via APScheduler)."""
+    from datetime import timedelta
+    now = datetime.now(timezone.utc)
+    proc_cutoff = (now - timedelta(minutes=5)).isoformat()
+    pend_cutoff = (now - timedelta(minutes=10)).isoformat()
+    stale = await db.ai_media_jobs.find({
+        '$or': [
+            {'status': 'processing', 'started_at': {'$lt': proc_cutoff}},
+            {'status': 'pending', 'created_at': {'$lt': pend_cutoff}},
+        ]
+    }, {'_id': 0}).to_list(50)
+    if not stale:
+        return 0
+    for j in stale:
+        try:
+            # Refund 1 credit per stuck job
+            doc = await _ensure_subscription_doc()
+            new_bal = int(doc.get('credit_balance', 0)) + 1
+            await db.subscriptions.update_one({'id': 'main'},
+                {'$set': {'credit_balance': new_bal, 'updated_at': now_iso()},
+                 '$push': {'transactions': {
+                     'type': 'refund', 'amount': 1, 'balance_after': new_bal,
+                     'at': now_iso(),
+                     'note': f"İade: takılan iş otomatik kurtarıldı ({j['id'][:8]})",
+                 }}})
+            await db.ai_media_jobs.update_one({'id': j['id']}, {'$set': {
+                'status': 'error',
+                'error': 'Job timed out (auto-recovered, 1 kredi iade edildi)',
+                'finished_at': now_iso(),
+                'refunded': True,
+                'auto_recovered': True,
+            }})
+            logger.info(f"Recovered stale job {j['id'][:8]} ({j.get('status')})")
+        except Exception as e:
+            logger.warning(f"Failed to recover {j['id']}: {e}")
+    return len(stale)
+
+@api_router.post("/admin/ai/jobs/recover-stale")
+async def admin_recover_stale_jobs(user=Depends(require_admin)):
+    """Manual trigger for stale-job recovery (admin can force-run any time)."""
+    n = await recover_stale_jobs()
+    return {'ok': True, 'recovered': n}
 
 # ─────────────────────────── Gallery (Phase 2.1) ───────────────────────────
 class GalleryPublishIn(BaseModel):
@@ -1830,6 +1887,21 @@ async def startup_event():
         await object_storage.init_storage()
     except Exception as e:
         logger.warning(f"Object storage init warning: {e}")
+    # Stale job recovery — boot + periodic every 3 min
+    try:
+        n = await recover_stale_jobs()
+        if n: logger.info(f"Boot stale recovery: {n} jobs cleaned")
+    except Exception as e:
+        logger.warning(f"Stale recovery boot failed: {e}")
+    try:
+        from apscheduler.triggers.interval import IntervalTrigger
+        if mackolik_scheduler._scheduler:
+            mackolik_scheduler._scheduler.add_job(
+                lambda: asyncio.run_coroutine_threadsafe(recover_stale_jobs(), asyncio.get_event_loop()),
+                IntervalTrigger(minutes=3), id='stale_recovery', replace_existing=True,
+            )
+    except Exception as e:
+        logger.warning(f"Stale recovery cron setup failed: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

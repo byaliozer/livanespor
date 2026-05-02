@@ -245,6 +245,39 @@ Bursa Nilüfer merkezli Livanespor için WordPress'ten bağımsız, modern, prem
   - Non-success job publish denemesi → 400 (sadece success işler eklenebilir).
   - Frontend smoke screenshot: 3 yüksek kaliteli görsel + DNA etiketleri + butonlar render edildi.
 
+## 5h. 2026-05-02 — Resilience Trio: Stale Recovery + Lightbox + Caption AI
+
+### A. Stale Job Recovery (DR AI Futbol mantığı + bizim async pattern)
+**Sorun analizi:** DR AI senkron POST → 524 timeout → 8dk arşiv polling fallback. Bizde async job pattern olduğu için timeout yok, AMA worker crash edip job sonsuza dek `processing` kalabilirdi.
+**Çözüm:**
+- `recover_stale_jobs()` — `processing >5dk` veya `pending >10dk` job'ları auto-fail eder + 1 kredi iade eder + `auto_recovered=True` flag.
+- Boot anında bir kez çalışır (server restart sonrası kayıp job'ları temizle).
+- APScheduler IntervalTrigger her 3dk'da bir çalışır (canlıda takılan job'lar saatlerce kalmaz).
+- Manuel trigger endpoint: `POST /api/admin/ai/jobs/recover-stale` (kullanıcı isterse force-run).
+
+### B. Lightbox (görsele tıkla → büyüt + indir + caption göster)
+- Yeni `/app/frontend/src/components/admin/Lightbox.jsx` shared component.
+- AI Stüdyo: tüm başarılı job kartlarındaki görseller tıklanabilir → modal açılır, **batch içinde sol/sağ ok ile gezinme**, ESC kapatma.
+- Galeri: galeri item'larına tıklayınca lightbox açılır (galeri item'ları arası gezinme).
+- Medya Arşivi: arşiv item'larına tıklayınca lightbox.
+- Sağ panelde: Şablon adı, Design DNA, **Instagram caption + 5 hashtag** ("Kopyala" butonuyla tek tıkta clipboard'a), İndir butonu, thumbnail navigation.
+- Klavye: ESC kapat, ← → batch içinde gezinme.
+
+### C. Otomatik Caption + 5 Hashtag (DR AI Futbol tonu portu)
+- Yeni `/app/backend/caption_ai.py` — `emergentintegrations.LlmChat` üzerinden **GPT-5.2** ile.
+- `EMERGENT_LLM_KEY` env'den okunur (.env'de zaten var).
+- **Türkçe samimi ton** + 1-3 emoji + 2-6 satır + **klişe yasakları** (zafer için savaşacağız vs).
+- **Sonuç tonu otomatik tespit** (`full_time` template'i için): galibiyet/mağlubiyet/beraberlik. Mağlubiyette `"üzgünüz/kayıp"` kelimeleri açıkça yasaklı, "daha iyi yarınlar" pozitif ton dayatılıyor.
+- 5 hashtag deterministic: `#{short_name} #{city|league} + 3 content-type-specific tag` (slugify Turkish chars: `ı→i, ş→s, ğ→g, ü→u, ç→c, ö→o`).
+- `_run_ai_job` success branch'inde otomatik tetiklenir, hata olursa best-effort silent (görsel yine kullanıcıya gider).
+- `media` ve `ai_media_jobs` doc'larına `social_caption: {caption, hashtags, combined}` saklanır.
+- Frontend: job kartında 2 satır preview + lightbox'ta tam metin + "Kopyala" butonu.
+
+### Test
+- Manuel curl: `special_day` → caption üretildi: "23 Nisan Ulusal Egemenlik ve Çocuk Bayramı kutlu olsun! 🏆 Livanespor TEST olarak yarınlarımızın sahibi çocuklarımızın yanında, aynı sevincin içindeyiz. ⚽..." + hashtags `#liv #amatorfutbol #ozelgun #kutluolsun #futbol`
+- Stale recovery manual trigger: 200 OK, recovered=0 (sistem temiz).
+- Lightbox screenshot: 23 Nisan poster tam ekran + DNA tag + "İndir (1/3)" + 3 thumbnail navigation çalışıyor.
+
 ## 6. Backlog
 ### P1 (next iteration)
 - **Refactor monolith:** server.py (~1700) + ai_media.py (611) → `/app/backend/routes/` + `services/` + `design_dna.py`.
