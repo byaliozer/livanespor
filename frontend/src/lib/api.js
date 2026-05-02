@@ -124,4 +124,5 @@ export const adminApi = {
     galleryPublish: (job_id) => api.post("/admin/ai/gallery/publish", { job_id }).then((r) => r.data),
     galleryUnpublish: (job_id) => api.post("/admin/ai/gallery/unpublish", { job_id }).then((r) => r.data),
     gallerySeed: (template_key, count = 3, quality = "high") => api.post("/admin/ai/gallery/seed", { template_key, count, quality }).then((r) => r.data),
+    galleryImportFromSource: (source_url, per_template = 6) => api.post("/admin/ai/gallery/import-from-source", { source_url, per_template }).then((r) => r.data),
 };

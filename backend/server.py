@@ -1233,6 +1233,87 @@ async def admin_ai_gallery_seed(payload: GallerySeedIn, user=Depends(require_adm
             asyncio.create_task(_run_ai_job(job['id']))
     return {'batch_id': batch_id, 'jobs': jobs, 'count': n}
 
+
+class GalleryImportIn(BaseModel):
+    source_url: str  # e.g. https://livanespor-pro.preview.emergentagent.com
+    template_keys: Optional[List[str]] = None  # if None → all 9
+    per_template: int = 6  # max items per template
+
+
+@api_router.post("/admin/ai/gallery/import-from-source")
+async def admin_gallery_import_from_source(payload: GalleryImportIn, user=Depends(require_admin)):
+    """Süper admin only: fetches the public gallery from another deployment
+    (e.g. preview) and copies the images + metadata into THIS deployment's
+    storage + DB. FREE — no AI credits consumed, since images already exist.
+    Idempotent: skips items already imported from same source_url.
+    """
+    if user.get('role') != 'super_admin':
+        raise HTTPException(403, "Sadece süper admin galeriye dış kaynaktan içe aktarabilir")
+    src = payload.source_url.rstrip('/')
+    if not src.startswith(('http://', 'https://')):
+        raise HTTPException(400, "Geçersiz kaynak URL")
+    template_keys = payload.template_keys or list(ai_media.TEMPLATES.keys())
+    per_template = max(1, min(payload.per_template, 12))
+    summary: Dict[str, Any] = {'imported': 0, 'skipped': 0, 'failed': 0, 'per_template': {}}
+    async with httpx.AsyncClient(timeout=60) as client:
+        for tk in template_keys:
+            tk_imported = 0; tk_skipped = 0; tk_failed = 0
+            try:
+                r = await client.get(f"{src}/api/public/ai/gallery", params={'template_key': tk, 'limit': per_template})
+                if r.status_code != 200:
+                    summary['per_template'][tk] = {'imported': 0, 'skipped': 0, 'failed': per_template, 'error': f'HTTP {r.status_code}'}
+                    summary['failed'] += per_template
+                    continue
+                items = r.json()
+            except Exception as e:
+                summary['per_template'][tk] = {'imported': 0, 'skipped': 0, 'failed': per_template, 'error': str(e)[:120]}
+                summary['failed'] += per_template
+                continue
+            for item in items:
+                try:
+                    src_id = item.get('id')
+                    if src_id and await db.media.find_one({'imported_source_id': src_id}, {'_id': 1}):
+                        tk_skipped += 1; continue
+                    img_url = f"{src}{item.get('public_url')}" if (item.get('public_url') or '').startswith('/') else item.get('public_url')
+                    if not img_url:
+                        tk_failed += 1; continue
+                    rr = await client.get(img_url)
+                    if rr.status_code != 200 or not rr.content:
+                        tk_failed += 1; continue
+                    storage_path = object_storage.new_path(f"gallery/{tk}", ext="png")
+                    await object_storage.put_bytes(storage_path, rr.content, content_type="image/png")
+                    public_url = f"/api/public/media/{storage_path}"
+                    media_doc = {
+                        'id': new_id(),
+                        'title': f"Gallery seed (imported) — {tk}",
+                        'type': 'image',
+                        'purpose': 'gallery',
+                        'source': 'ai_template',
+                        'storage_path': storage_path,
+                        'public_url': public_url,
+                        'template_key': tk,
+                        'gallery_template_key': tk,
+                        'design': item.get('design'),
+                        'aspect_ratio': item.get('aspect_ratio'),
+                        'published_to_gallery': True,
+                        'is_gallery_seed': True,
+                        'is_deleted': False,
+                        'imported_source_url': src,
+                        'imported_source_id': src_id,
+                        'created_at': now_iso(),
+                    }
+                    await db.media.insert_one(media_doc)
+                    tk_imported += 1
+                except Exception as e:
+                    logger.warning(f"gallery import failed for {tk}/{src_id}: {e}")
+                    tk_failed += 1
+            summary['per_template'][tk] = {'imported': tk_imported, 'skipped': tk_skipped, 'failed': tk_failed}
+            summary['imported'] += tk_imported
+            summary['skipped'] += tk_skipped
+            summary['failed'] += tk_failed
+    return summary
+
+
 # Archive list with filters
 @api_router.get("/admin/media-archive")
 async def admin_media_archive(source: Optional[str] = None, limit: int = 200, user=Depends(require_admin)):

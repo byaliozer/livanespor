@@ -304,6 +304,23 @@ const AiStudio = () => {
         } finally { setSeeding(false); }
     };
 
+    const importGalleryFromPreview = async () => {
+        const PREVIEW_URL = "https://livanespor-pro.preview.emergentagent.com";
+        if (!window.confirm(
+            `Önizleme ortamından (${PREVIEW_URL}) tüm 9 şablonun galeri örnekleri bu ortama kopyalanacak.\n\n` +
+            `• Kredi tüketmez (görseller zaten üretilmiş, sadece kopyalanır).\n` +
+            `• Tekrar çalıştırılırsa zaten kopyalananlar atlanır.\n\nDevam edilsin mi?`
+        )) return;
+        setSeeding(true);
+        try {
+            const res = await adminApi.galleryImportFromSource(PREVIEW_URL, 6);
+            toast.success(`İçe aktarma tamamlandı — ${res.imported} eklendi, ${res.skipped} atlandı, ${res.failed} hata.`);
+            if (active?.key) setGallery(await adminApi.galleryList(active.key, 12));
+        } catch (e) {
+            toast.error("İçe aktarma başarısız: " + (e?.response?.data?.detail || e.message));
+        } finally { setSeeding(false); }
+    };
+
     const needsPlayer = active?.required_inputs.includes("player_id");
     const needsPlayers = active?.required_inputs.includes("players");
     const needsMatch = active?.required_inputs.some((r) => ["home_name", "away_name", "home_score", "away_score"].includes(r));
@@ -341,9 +358,14 @@ const AiStudio = () => {
                             <h3 className="font-display text-2xl uppercase inline-flex items-center gap-2"><Eye className="w-5 h-5 text-liv-yellow" /> Örnek Tasarımlar — {active.name}</h3>
                             <p className="text-[11px] text-neutral-500 mt-0.5">Bu şablonun farklı Design DNA'larıyla üretilmiş yüksek kaliteli örnekleri. Beğendiğin DNA'yı tek tıkla kullan.</p>
                         </div>
-                        <button onClick={seedGallery} disabled={seeding} className="btn-secondary !py-2 !px-3 !text-xs inline-flex items-center gap-1.5 disabled:opacity-60" data-testid="gallery-seed-btn">
-                            {seeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} Galeriye 3 Örnek Ekle (3 kredi · HIGH)
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button onClick={importGalleryFromPreview} disabled={seeding} className="btn-secondary !py-2 !px-3 !text-xs inline-flex items-center gap-1.5 disabled:opacity-60 border-liv-yellow/40 text-liv-yellow hover:bg-liv-yellow/10" data-testid="gallery-import-btn" title="Önizleme ortamından tüm 9 şablonun galeri örneklerini bu ortama kopyalar — kredi tüketmez">
+                                {seeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} Önizlemeden İçe Aktar (Ücretsiz)
+                            </button>
+                            <button onClick={seedGallery} disabled={seeding} className="btn-secondary !py-2 !px-3 !text-xs inline-flex items-center gap-1.5 disabled:opacity-60" data-testid="gallery-seed-btn">
+                                {seeding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} Galeriye 3 Örnek Ekle (3 kredi · HIGH)
+                            </button>
+                        </div>
                     </div>
                     {gallery.length === 0 ? (
                         <div className="text-sm text-neutral-500 py-8 text-center border border-dashed border-liv-border">
