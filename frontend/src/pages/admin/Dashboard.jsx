@@ -3,10 +3,19 @@ import { Link } from "react-router-dom";
 import { adminApi } from "@/lib/api";
 import { formatDateTR, formatTimeTR } from "@/lib/dateFormat";
 import {
-    Trophy, Calendar, Image as ImageIcon, AlertTriangle, Cake, Clock,
-    Plus, Wand2, RefreshCw, Package, Mail, ClipboardList, FileText,
-    UserCog, Newspaper, Users, Sparkles,
+    Trophy, Calendar, Cake, Mail, Newspaper, Sparkles,
+    Plus, Wand2, RefreshCw, Package,
+    UserCog, Users, ClipboardList,
 } from "lucide-react";
+
+// Eski tarz büyük StatCard
+const StatCard = ({ icon: Icon, label, value, accent = false, to }) => (
+    <Link to={to || "#"} className={`block p-6 border ${accent ? "bg-liv-yellow text-black border-liv-yellow hover:bg-liv-yellow/90" : "bg-liv-card border-liv-border hover:border-liv-yellow"} transition-colors rounded-md`} data-testid={`stat-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+        <Icon className={`w-6 h-6 ${accent ? "text-black" : "text-liv-yellow"}`} />
+        <div className={`font-display text-5xl mt-3 ${accent ? "text-black" : "text-white"}`}>{value ?? 0}</div>
+        <div className={`text-xs uppercase tracking-widest mt-1 ${accent ? "text-black/70" : "text-neutral-400"}`}>{label}</div>
+    </Link>
+);
 
 // Son 5 maç rozet
 const ResultBadge = ({ r }) => {
@@ -65,19 +74,7 @@ const LeagueHero = ({ ls }) => {
     );
 };
 
-// Küçük kart
-const MiniMetric = ({ icon: Icon, label, value, to, accent = false }) => (
-    <Link to={to || "#"} className={`block p-5 border ${accent ? "bg-liv-yellow/[0.08] border-liv-yellow/40" : "bg-liv-card border-liv-border"} hover:border-liv-yellow transition rounded-lg`} data-testid={`mini-${label.toLowerCase().replace(/\s+/g, "-")}`}>
-        <div className="flex items-center gap-2 mb-3">
-            <div className={`w-8 h-8 ${accent ? "bg-liv-yellow/20" : "bg-liv-black"} flex items-center justify-center`}>
-                <Icon className={`w-4 h-4 ${accent ? "text-liv-yellow" : "text-neutral-400"}`} />
-            </div>
-            <span className="text-[10px] uppercase tracking-widest text-neutral-400 leading-tight">{label}</span>
-        </div>
-        <div className={`font-display text-4xl ${accent ? "text-liv-yellow" : "text-white"}`}>{value ?? 0}</div>
-    </Link>
-);
-
+// Küçük kart (gösterimi şu an sadece secondary panellerde kullanılıyor)
 const QuickAction = ({ icon: Icon, label, to }) => (
     <Link to={to} className="flex items-center gap-3 p-3 bg-liv-card border border-liv-border hover:border-liv-yellow hover:bg-liv-yellow/[0.04] transition rounded-md" data-testid={`quick-${label.toLowerCase().replace(/\s+/g, "-")}`}>
         <div className="w-8 h-8 bg-liv-yellow/20 flex items-center justify-center"><Icon className="w-4 h-4 text-liv-yellow" /></div>
@@ -107,13 +104,13 @@ const AdminDashboard = () => {
             {/* Top hero: League status */}
             <LeagueHero ls={stats.league_status} />
 
-            {/* 5 mini metric cards */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                <MiniMetric icon={Trophy} label="Yaklaşan Maç" value={stats.upcoming_matches} to="/admin/matches" accent />
-                <MiniMetric icon={ImageIcon} label="Toplam Medya" value={stats.media_total} to="/admin/media" />
-                <MiniMetric icon={AlertTriangle} label="Eksik Rakip Logo" value={stats.missing_opponent_logos} to="/admin/opponents" />
-                <MiniMetric icon={Cake} label="Bugün Doğum Günü" value={stats.birthdays_today} to="/admin/players" />
-                <MiniMetric icon={Clock} label="Son 7 Gün" value={stats.media_last_7_days} to="/admin/media" />
+            {/* 5 büyük StatCard — istek: Yaklaşan Maç / Doğum Günü / Toplam Haber / Sponsor / Mesaj */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                <StatCard icon={Trophy} label="Yaklaşan Maç" value={stats.upcoming_matches} to="/admin/matches" accent />
+                <StatCard icon={Cake} label="Yaklaşan Doğum Günü" value={(stats.upcoming_birthdays || []).length} to="/admin/players" />
+                <StatCard icon={Newspaper} label="Toplam Haber" value={stats.posts_total} to="/admin/posts" />
+                <StatCard icon={Sparkles} label="Sponsor" value={stats.sponsors_active} to="/admin/sponsors" />
+                <StatCard icon={Mail} label="Okunmamış Mesaj" value={stats.messages_unread} to="/admin/messages" />
             </div>
 
             {/* Subscription + Mackolik (compact) */}
@@ -235,16 +232,6 @@ const AdminDashboard = () => {
                         </div>
                     )}
                 </div>
-            </div>
-
-            {/* Compat secondary stats (alt küçük şerit) */}
-            <div className="grid grid-cols-3 md:grid-cols-6 gap-2 pt-4 border-t border-liv-border/30">
-                <Link to="/admin/posts" className="block p-3 bg-liv-card border border-liv-border hover:border-liv-yellow text-center"><div className="text-xs text-neutral-500 uppercase tracking-widest">Toplam Haber</div><div className="font-display text-2xl text-white mt-1">{stats.posts_total}</div></Link>
-                <Link to="/admin/posts" className="block p-3 bg-liv-card border border-liv-border hover:border-liv-yellow text-center"><div className="text-xs text-neutral-500 uppercase tracking-widest">Yayında</div><div className="font-display text-2xl text-liv-yellow mt-1">{stats.posts_published}</div></Link>
-                <Link to="/admin/posts" className="block p-3 bg-liv-card border border-liv-border hover:border-liv-yellow text-center"><div className="text-xs text-neutral-500 uppercase tracking-widest">Taslak</div><div className="font-display text-2xl text-neutral-300 mt-1">{stats.posts_draft}</div></Link>
-                <Link to="/admin/players" className="block p-3 bg-liv-card border border-liv-border hover:border-liv-yellow text-center"><div className="text-xs text-neutral-500 uppercase tracking-widest">Oyuncu</div><div className="font-display text-2xl text-white mt-1">{stats.players_active}</div></Link>
-                <Link to="/admin/sponsors" className="block p-3 bg-liv-card border border-liv-border hover:border-liv-yellow text-center"><div className="text-xs text-neutral-500 uppercase tracking-widest">Sponsor</div><div className="font-display text-2xl text-white mt-1">{stats.sponsors_active}</div></Link>
-                <Link to="/admin/messages" className="block p-3 bg-liv-card border border-liv-border hover:border-liv-yellow text-center"><div className="text-xs text-neutral-500 uppercase tracking-widest">Okunmamış</div><div className="font-display text-2xl text-liv-yellow mt-1">{stats.messages_unread}</div></Link>
             </div>
         </div>
     );

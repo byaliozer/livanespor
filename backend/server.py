@@ -1700,11 +1700,21 @@ async def admin_dashboard_stats(user=Depends(require_admin)):
 
     # League status — find own club's row in standings (most recent season/group)
     site = await db.site_settings.find_one({'id': 'main'}, {'_id': 0}) or {}
-    own_name = (site.get('site_title') or site.get('short_name') or 'Livanespor').strip().lower()
+    own_full = (site.get('site_title') or site.get('short_name') or 'Livanespor').strip().lower()
+    # Take first significant word for fuzzy matching (e.g. "Livanespor TEST" → "livanespor")
+    own_first = own_full.split()[0] if own_full else ''
+    own_name = own_first or own_full
+
+    def _team_matches_own(team_name: str) -> bool:
+        tn = (team_name or '').strip().lower()
+        if not tn: return False
+        if tn == own_full or tn == own_name:
+            return True
+        # Fuzzy: own's first word in team_name OR team_name in own_full
+        return own_name in tn or tn in own_full
+
     standings_rows = await db.standings.find({}, {'_id': 0}).sort('rank', 1).to_list(50)
-    own_row = next((r for r in standings_rows if (r.get('team_name') or '').strip().lower() == own_name), None)
-    if not own_row:
-        own_row = next((r for r in standings_rows if own_name in (r.get('team_name') or '').lower()), None)
+    own_row = next((r for r in standings_rows if _team_matches_own(r.get('team_name'))), None)
     last_5 = []
     league_status = None
     if own_row:
@@ -1720,10 +1730,10 @@ async def admin_dashboard_stats(user=Depends(require_admin)):
                 continue
             last_5.append('G' if our > their else ('B' if our == their else 'M'))
         league_status = {
-            'group_name': own_row.get('group_name') or own_row.get('league_group') or own_row.get('competition'),
+            'group_name': own_row.get('group_label') or own_row.get('league_group') or own_row.get('competition'),
             'season': own_row.get('season'),
             'rank': own_row.get('rank'),
-            'total_teams': len(standings_rows) or own_row.get('total_teams'),
+            'total_teams': sum(1 for r in standings_rows if r.get('league_group') == own_row.get('league_group')) or len(standings_rows),
             'points': own_row.get('points'),
             'played': own_row.get('played'),
             'wins': own_row.get('wins'),
@@ -1731,7 +1741,7 @@ async def admin_dashboard_stats(user=Depends(require_admin)):
             'losses': own_row.get('losses'),
             'goals_for': own_row.get('goals_for'),
             'goals_against': own_row.get('goals_against'),
-            'goal_diff': (own_row.get('goals_for') or 0) - (own_row.get('goals_against') or 0),
+            'goal_diff': own_row.get('goal_difference') if own_row.get('goal_difference') is not None else (own_row.get('goals_for') or 0) - (own_row.get('goals_against') or 0),
             'last_5': last_5,
         }
 

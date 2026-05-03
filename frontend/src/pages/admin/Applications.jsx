@@ -68,16 +68,16 @@ const Applications = () => {
             </div>
 
             {edit && (
-                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-start md:items-center justify-center p-4 overflow-y-auto">
-                    <div className="bg-liv-card border border-liv-border w-full max-w-2xl my-8">
-                        <div className="flex items-center justify-between p-5 border-b border-liv-border">
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 md:p-4" onClick={(e) => { if (e.target === e.currentTarget) setEdit(null); }}>
+                    <div className="bg-liv-card border border-liv-border w-full max-w-2xl max-h-[92vh] flex flex-col rounded-md overflow-hidden">
+                        <div className="flex items-center justify-between p-4 md:p-5 border-b border-liv-border flex-shrink-0">
                             <div>
                                 <h2 className="font-display text-2xl uppercase">{edit.player_name}</h2>
                                 <div className="text-xs text-neutral-400 font-mono">{edit.application_no}</div>
                             </div>
                             <button onClick={() => setEdit(null)} className="text-neutral-400 hover:text-white"><X /></button>
                         </div>
-                        <div className="p-5 space-y-4 text-sm">
+                        <div className="p-4 md:p-5 space-y-4 text-sm overflow-y-auto flex-1">
                             <div className="grid grid-cols-2 gap-4">
                                 <div><div className="text-xs text-neutral-500">Yaş</div><div className="font-semibold">{edit.age || "-"}</div></div>
                                 <div><div className="text-xs text-neutral-500">Yaş Grubu</div><div className="font-semibold">{edit.age_group || "-"}</div></div>
@@ -106,7 +106,7 @@ const Applications = () => {
                                 <input value={edit.assigned_to || ""} onChange={(e) => setEdit({ ...edit, assigned_to: e.target.value })} className="liv-input" />
                             </div>
                         </div>
-                        <div className="p-5 border-t border-liv-border flex justify-end gap-3">
+                        <div className="p-4 md:p-5 border-t border-liv-border flex justify-end gap-3 flex-shrink-0 bg-liv-card">
                             <button onClick={() => setEdit(null)} className="btn-ghost-light !py-2 !px-4 !text-xs">Kapat</button>
                             <button onClick={save} className="btn-primary !py-2 !px-4 !text-xs inline-flex items-center gap-2"><Save className="w-4 h-4" /> Kaydet</button>
                         </div>

@@ -42,13 +42,13 @@ const Users = () => {
                 </table>
             </div>
             {creating && (
-                <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-                    <div className="bg-liv-card border border-liv-border w-full max-w-md">
-                        <div className="flex items-center justify-between p-5 border-b border-liv-border">
+                <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-2 md:p-4" onClick={(e) => { if (e.target === e.currentTarget) setCreating(null); }}>
+                    <div className="bg-liv-card border border-liv-border w-full max-w-md max-h-[92vh] flex flex-col rounded-md overflow-hidden">
+                        <div className="flex items-center justify-between p-4 md:p-5 border-b border-liv-border flex-shrink-0">
                             <h2 className="font-display text-2xl uppercase">Yeni Kullanıcı</h2>
                             <button onClick={() => setCreating(null)}><X /></button>
                         </div>
-                        <div className="p-5 space-y-4">
+                        <div className="p-4 md:p-5 space-y-4 overflow-y-auto flex-1">
                             <div><label className="liv-label">İsim</label><input value={creating.name} onChange={(e) => setCreating({ ...creating, name: e.target.value })} className="liv-input" /></div>
                             <div><label className="liv-label">E-posta</label><input type="email" value={creating.email} onChange={(e) => setCreating({ ...creating, email: e.target.value })} className="liv-input" /></div>
                             <div><label className="liv-label">Şifre</label><input type="password" value={creating.password} onChange={(e) => setCreating({ ...creating, password: e.target.value })} className="liv-input" /></div>
@@ -63,7 +63,7 @@ const Users = () => {
                                 </select>
                             </div>
                         </div>
-                        <div className="p-5 border-t border-liv-border flex justify-end gap-2">
+                        <div className="p-4 md:p-5 border-t border-liv-border flex justify-end gap-2 flex-shrink-0 bg-liv-card">
                             <button onClick={() => setCreating(null)} className="btn-ghost-light !py-2 !px-4 !text-xs">İptal</button>
                             <button onClick={save} className="btn-primary !py-2 !px-4 !text-xs inline-flex items-center gap-2"><Save className="w-4 h-4" /> Oluştur</button>
                         </div>

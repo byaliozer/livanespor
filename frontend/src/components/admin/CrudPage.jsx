@@ -215,13 +215,13 @@ const CrudPage = ({
             </div>
 
             {editing && (
-                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-start md:items-center justify-center p-4 overflow-y-auto" data-testid="crud-modal">
-                    <div className="bg-liv-card border border-liv-border w-full max-w-3xl my-8">
-                        <div className="flex items-center justify-between p-5 border-b border-liv-border">
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 md:p-4" data-testid="crud-modal" onClick={(e) => { if (e.target === e.currentTarget) setEditing(null); }}>
+                    <div className="bg-liv-card border border-liv-border w-full max-w-3xl max-h-[92vh] flex flex-col rounded-md overflow-hidden">
+                        <div className="flex items-center justify-between p-4 md:p-5 border-b border-liv-border flex-shrink-0">
                             <h2 className="font-display text-2xl uppercase">{editing.__new ? "Yeni Kayıt" : "Düzenle"}</h2>
                             <button onClick={() => setEditing(null)} className="text-neutral-400 hover:text-white" data-testid="crud-modal-close"><X className="w-5 h-5" /></button>
                         </div>
-                        <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="p-4 md:p-5 grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto flex-1">
                             {fields.map((f) => (
                                 <div key={f.name} className={f.fullWidth ? "md:col-span-2" : ""}>
                                     <label className="liv-label">{f.label}{f.required && " *"}</label>
@@ -246,7 +246,7 @@ const CrudPage = ({
                                 </div>
                             ))}
                         </div>
-                        <div className="p-5 border-t border-liv-border flex justify-end gap-3">
+                        <div className="p-4 md:p-5 border-t border-liv-border flex justify-end gap-3 flex-shrink-0 bg-liv-card">
                             <button onClick={() => setEditing(null)} className="btn-ghost-light !py-2 !px-4 !text-xs">İptal</button>
                             <button onClick={save} className="btn-primary !py-2 !px-4 !text-xs inline-flex items-center gap-2" data-testid="crud-save-btn"><Save className="w-4 h-4" /> Kaydet</button>
                         </div>
