@@ -1672,7 +1672,8 @@ async def admin_birthdays(days: int = 30, user=Depends(require_admin)):
 @api_router.get("/admin/dashboard/stats")
 async def admin_dashboard_stats(user=Depends(require_admin)):
     [posts_total, posts_pub, posts_draft, players_active, sponsors_active,
-     upcoming_matches, applications_new, messages_unread, media_total] = await asyncio.gather(
+     upcoming_matches, applications_new, messages_unread, media_total,
+     opponents_total] = await asyncio.gather(
         db.posts.count_documents({}),
         db.posts.count_documents({'status': 'published'}),
         db.posts.count_documents({'status': 'draft'}),
@@ -1682,12 +1683,73 @@ async def admin_dashboard_stats(user=Depends(require_admin)):
         db.academy_applications.count_documents({'status': 'new'}),
         db.contact_messages.count_documents({'status': 'unread'}),
         db.media.count_documents({}),
+        db.opponent_clubs.count_documents({}),
     )
     recent_apps = await db.academy_applications.find({}, {'_id': 0}).sort('created_at', -1).limit(5).to_list(5)
     recent_msgs = await db.contact_messages.find({}, {'_id': 0}).sort('created_at', -1).limit(5).to_list(5)
     birthdays = await _upcoming_birthdays(days_ahead=30)
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    birthdays_today = sum(1 for b in birthdays if b.get('upcoming_date') == today_iso)
     macko = await db.site_settings.find_one({'id': 'mackolik'}, {'_id': 0}) or {}
     subscription = await _ensure_subscription_doc()
+
+    # Upcoming matches list (next 5)
+    upcoming_list = await db.matches.find(
+        {'status': 'upcoming'}, {'_id': 0}
+    ).sort('match_date', 1).limit(5).to_list(5)
+
+    # League status — find own club's row in standings (most recent season/group)
+    site = await db.site_settings.find_one({'id': 'main'}, {'_id': 0}) or {}
+    own_name = (site.get('site_title') or site.get('short_name') or 'Livanespor').strip().lower()
+    standings_rows = await db.standings.find({}, {'_id': 0}).sort('rank', 1).to_list(50)
+    own_row = next((r for r in standings_rows if (r.get('team_name') or '').strip().lower() == own_name), None)
+    if not own_row:
+        own_row = next((r for r in standings_rows if own_name in (r.get('team_name') or '').lower()), None)
+    last_5 = []
+    league_status = None
+    if own_row:
+        last_5_played = await db.matches.find(
+            {'status': 'finished'}, {'_id': 0}
+        ).sort('match_date', -1).limit(5).to_list(5)
+        for m in last_5_played:
+            home_l = (m.get('home_team') or '').strip().lower()
+            we_home = own_name in home_l
+            our = m.get('home_score') if we_home else m.get('away_score')
+            their = m.get('away_score') if we_home else m.get('home_score')
+            if our is None or their is None:
+                continue
+            last_5.append('G' if our > their else ('B' if our == their else 'M'))
+        league_status = {
+            'group_name': own_row.get('group_name') or own_row.get('league_group') or own_row.get('competition'),
+            'season': own_row.get('season'),
+            'rank': own_row.get('rank'),
+            'total_teams': len(standings_rows) or own_row.get('total_teams'),
+            'points': own_row.get('points'),
+            'played': own_row.get('played'),
+            'wins': own_row.get('wins'),
+            'draws': own_row.get('draws'),
+            'losses': own_row.get('losses'),
+            'goals_for': own_row.get('goals_for'),
+            'goals_against': own_row.get('goals_against'),
+            'goal_diff': (own_row.get('goals_for') or 0) - (own_row.get('goals_against') or 0),
+            'last_5': last_5,
+        }
+
+    # Missing opponent logos: matches whose opponent is not in opponent_clubs
+    opps_existing = {(o.get('name') or '').strip().lower() for o in await db.opponent_clubs.find({}, {'_id': 0}).to_list(500)}
+    all_match_opponents = set()
+    async for m in db.matches.find({}, {'_id': 0, 'home_team': 1, 'away_team': 1}):
+        for nm in (m.get('home_team'), m.get('away_team')):
+            if not nm: continue
+            nl = nm.strip().lower()
+            if nl == own_name or own_name in nl: continue
+            all_match_opponents.add(nl)
+    missing_opponent_logos = sum(1 for nl in all_match_opponents if nl not in opps_existing and not any(o in nl or nl in o for o in opps_existing if o))
+
+    # Media in last 7 days
+    seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    media_last_7_days = await db.media.count_documents({'created_at': {'$gte': seven_days_ago}})
+
     return {
         'posts_total': posts_total,
         'posts_published': posts_pub,
@@ -1701,6 +1763,12 @@ async def admin_dashboard_stats(user=Depends(require_admin)):
         'recent_applications': recent_apps,
         'recent_messages': recent_msgs,
         'upcoming_birthdays': birthdays[:6],
+        'birthdays_today': birthdays_today,
+        'opponents_total': opponents_total,
+        'missing_opponent_logos': missing_opponent_logos,
+        'media_last_7_days': media_last_7_days,
+        'upcoming_matches_list': upcoming_list,
+        'league_status': league_status,
         'mackolik': {
             'enabled': macko.get('enabled', False),
             'team_display_name': macko.get('team_display_name'),
