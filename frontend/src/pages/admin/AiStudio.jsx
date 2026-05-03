@@ -123,6 +123,86 @@ const DesignCustomizer = ({ options, custom, setCustom, values, setValues }) => 
     </div>
 );
 
+// Template-level placement hint shown to admin (matches backend _SIGNATURE_PLACEMENT)
+const SIGNATURE_PLACEMENT_LABEL = {
+    match_week:   "Sol alt köşe · Sağ alt köşe",
+    match_day:    "Sol alt köşe · Sağ alt köşe",
+    full_time:    "Sol alt köşe · Sağ alt köşe",
+    lineup:       "Sol alt köşe · Sağ alt köşe",
+    motm:         "Sağ alt, iki satır istiflenmiş",
+    birthday:     "Sağ alt, iki satır istiflenmiş",
+    new_transfer: "Sağ alt, iki satır istiflenmiş",
+    special_day:  "Alt orta şerit (tek satır)",
+    fan_invite:   "Alt orta şerit (tek satır)",
+};
+
+const SignatureBlock = ({ templateKey, siteS, ctx, setCtxField }) => {
+    const defaultWeb = (siteS?.website || "").trim();
+    const defaultIg  = (siteS?.instagram_username || (siteS?.social || {}).instagram || "").trim();
+    const showWeb = ctx.show_website !== false;
+    const showIg  = ctx.show_instagram !== false;
+    const webVal = ctx.website_text !== undefined ? ctx.website_text : defaultWeb;
+    const igVal  = ctx.instagram_text !== undefined ? ctx.instagram_text : defaultIg;
+    const placement = SIGNATURE_PLACEMENT_LABEL[templateKey] || "Sol alt · Sağ alt";
+
+    return (
+        <div className="bg-liv-card border border-liv-border p-6 space-y-3" data-testid="signature-block">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div>
+                    <h3 className="font-display text-lg uppercase">Marka İmzası (opsiyonel)</h3>
+                    <p className="text-[11px] text-neutral-400 mt-1">Görselin alt kısmına web sitesi ve Instagram yazılır. Boş bırakırsan Site Ayarları'ndan otomatik alınır.</p>
+                </div>
+                <div className="text-[10px] uppercase tracking-widest text-liv-yellow" data-testid="signature-placement-hint">Konum: {placement}</div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="border border-liv-border bg-liv-surface p-3 rounded-sm">
+                    <label className="flex items-center gap-2 cursor-pointer text-sm">
+                        <input type="checkbox" checked={showWeb} onChange={(e) => setCtxField("show_website", e.target.checked)} className="accent-liv-yellow" data-testid="signature-show-web" />
+                        <span className="font-semibold text-neutral-200">Web sitesi ekle</span>
+                    </label>
+                    <input
+                        type="text"
+                        className="liv-input mt-2 !py-1.5"
+                        value={webVal}
+                        onChange={(e) => setCtxField("website_text", e.target.value)}
+                        placeholder={defaultWeb || "www.livanespor.org"}
+                        disabled={!showWeb}
+                        data-testid="signature-web-input"
+                    />
+                    {defaultWeb && ctx.website_text !== undefined && ctx.website_text !== defaultWeb && (
+                        <button type="button" onClick={() => setCtxField("website_text", undefined)} className="text-[10px] text-liv-yellow hover:underline mt-1 uppercase tracking-widest">Site Ayarları'nı kullan ({defaultWeb})</button>
+                    )}
+                </div>
+
+                <div className="border border-liv-border bg-liv-surface p-3 rounded-sm">
+                    <label className="flex items-center gap-2 cursor-pointer text-sm">
+                        <input type="checkbox" checked={showIg} onChange={(e) => setCtxField("show_instagram", e.target.checked)} className="accent-liv-yellow" data-testid="signature-show-ig" />
+                        <span className="font-semibold text-neutral-200">Instagram ekle</span>
+                    </label>
+                    <input
+                        type="text"
+                        className="liv-input mt-2 !py-1.5"
+                        value={igVal}
+                        onChange={(e) => setCtxField("instagram_text", e.target.value)}
+                        placeholder={defaultIg || "livanespor"}
+                        disabled={!showIg}
+                        data-testid="signature-ig-input"
+                    />
+                    {defaultIg && ctx.instagram_text !== undefined && ctx.instagram_text !== defaultIg && (
+                        <button type="button" onClick={() => setCtxField("instagram_text", undefined)} className="text-[10px] text-liv-yellow hover:underline mt-1 uppercase tracking-widest">Site Ayarları'nı kullan (@{defaultIg.replace(/^@/, "")})</button>
+                    )}
+                </div>
+            </div>
+
+            {!defaultWeb && !defaultIg && (
+                <p className="text-[11px] text-amber-300">ℹ Varsayılan değerler için <strong>Site Ayarları → Sosyal Medya</strong> bölümüne Web Sitesi ve Instagram ekleyin.</p>
+            )}
+        </div>
+    );
+};
+
+
 const AiStudio = () => {
     const [templates, setTemplates] = useState([]);
     const [designOptions, setDesignOptions] = useState(null);
@@ -131,6 +211,7 @@ const AiStudio = () => {
     const [teamPhotos, setTeamPhotos] = useState([]);
     const [activeKey, setActiveKey] = useState("");
     const [ctx, setCtx] = useState({});
+    const [siteS, setSiteS] = useState({});  // site_settings for signature defaults
     const [aspect, setAspect] = useState(null);
     const [quality, setQuality] = useState("high");
     const [title, setTitle] = useState("");
@@ -159,10 +240,11 @@ const AiStudio = () => {
             adminApi.list("matches"),
             adminApi.list("team_photos"),
             adminApi.aiJobs(30),
-        ]).then(([t, d, p, m, tp, j]) => {
+            adminApi.settings(),
+        ]).then(([t, d, p, m, tp, j, ss]) => {
             setTemplates(t); setDesignOptions(d); setPlayers(p); setMatches(m);
             setTeamPhotos((tp || []).filter((x) => x.active !== false));
-            setJobs(j);
+            setJobs(j); setSiteS(ss || {});
             if (t[0]) setActiveKey(t[0].key);
         }).catch((e) => toast.error("Veri yüklenemedi: " + e.message));
     }, []);
@@ -621,6 +703,9 @@ const AiStudio = () => {
                                 )}
                             </div>
                         )}
+
+                        {/* Marka İmzası — website + instagram — tüm 9 şablonda */}
+                        <SignatureBlock templateKey={active.key} siteS={siteS} ctx={ctx} setCtxField={setCtxField} />
 
                         {/* Design customizer */}
                         <DesignCustomizer options={designOptions} custom={customDesign} setCustom={setCustomDesign} values={customVals} setValues={setCustomVals} />

@@ -131,6 +131,9 @@ const Settings = () => {
             {/* Sosyal Medya */}
             <div className="bg-liv-card border border-liv-border p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <h2 className="md:col-span-2 font-display text-2xl uppercase">Sosyal Medya</h2>
+                <div className="md:col-span-2"><label className="liv-label">Web Sitesi (görsellerde alt köşeye düşer)</label><input value={s.website || ""} onChange={(e) => update("website", e.target.value)} className="liv-input" placeholder="www.livanespor.org" data-testid="settings-website" />
+                    <p className="text-[11px] text-neutral-500 mt-1">http:// veya https:// eklemesen de olur; AI görselinde otomatik temizlenir.</p>
+                </div>
                 <div><label className="liv-label">Instagram Kullanıcı Adı</label><input value={s.instagram_username || ""} onChange={(e) => update("instagram_username", e.target.value)} className="liv-input" placeholder="@livanespor" data-testid="settings-instagram-username" /></div>
                 <div><label className="liv-label">Instagram Link</label><input value={s.social?.instagram || ""} onChange={(e) => updateSocial("instagram", e.target.value)} className="liv-input" /></div>
                 <div><label className="liv-label">Twitter</label><input value={s.social?.twitter || ""} onChange={(e) => updateSocial("twitter", e.target.value)} className="liv-input" /></div>

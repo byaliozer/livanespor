@@ -1,3 +1,47 @@
+## 5m. 2026-05-03 — v1.9.0 Marka İmzası (Website + Instagram) · Tüm 9 Şablon
+
+### Kullanıcı talebi
+"9 şablonun hepsine website+instagram ekleme soruları (tik seçili, auto-fill, override). Yerleşim: DR AI Futbol klasik tarzı sol alt web, sağ alt instagram. Site Ayarları'nda Sosyal Medya bölümünde değerler tutulsun."
+
+### Seçim: **d + ii** (Şablona göre akıllı konum, varsayılan AÇIK)
+
+### Backend (`/app/backend/ai_media.py`)
+- `_SIGNATURE_PLACEMENT` dict: her template_key için yerleşim preset'i:
+  - **classic** (sol alt + sağ alt): match_week, match_day, full_time, lineup
+  - **stack** (sağ alt, iki satır istif): motm, birthday, new_transfer
+  - **band** (alt orta şerit, tek satır): special_day, fan_invite
+- `_resolve_signature(ctx, s)`: Yeni helper — ctx'ten `show_website`/`website_text`/`show_instagram`/`instagram_text` okur, site_settings'ten fallback alır. URL normalize ediyor (http://, https://, trailing slash).
+- `_footer_lines(template_key, website, instagram)`: İmza adı placement'e göre farklı prompt üretiyor. Her case için ayrıntılı görsel talimat (corner, uppercase, accent color, subtle tracking).
+- Tüm 9 `build_*` fonksiyonu yeni imzayı kullanacak şekilde güncellendi.
+- Boş durumda (her ikisi kapalı): "FOOTER — CLEAN. Do NOT render any website URL, any @handle..." (halüsinasyon önlemi).
+
+### Backend (`/app/backend/server.py`)
+- `_resolve_template_ctx` zaten `dict(payload)` ile tüm form field'larını ctx'e aktarıyordu; `show_website`, `website_text`, `show_instagram`, `instagram_text` sorunsuz geçiyor.
+- `admin_update_settings` (GenericIn) `website` alanını kabul ediyor (extra='allow').
+
+### Frontend (`/app/frontend/src/pages/admin/Settings.jsx`)
+- Sosyal Medya bölümüne "Web Sitesi" input eklendi (`s.website`). Placeholder: `www.livanespor.org`. http:// / https:// opsiyonel.
+
+### Frontend (`/app/frontend/src/pages/admin/AiStudio.jsx`)
+- Yeni state: `siteS` (site_settings) → `adminApi.settings()` ile initial load'da fetch
+- Yeni component: `SignatureBlock` (tüm 9 şablonda ortak)
+  - İki kart: "Web sitesi ekle" + "Instagram ekle" checkbox'ları (varsayılan AÇIK)
+  - Input'lar: Site Ayarları'ndan default, kullanıcı override edebilir
+  - "Site Ayarları'nı kullan" butonu (override'u resetler)
+  - Uyarı: ikisi de boşsa "Site Ayarları → Sosyal Medya bölümüne ekleyin" notu
+  - Sağ üstte `SIGNATURE_PLACEMENT_LABEL` ile Türkçe yerleşim ipucu ("Konum: Sol alt köşe · Sağ alt köşe")
+- Reference Images sonrası, Design Customizer öncesi render edilir.
+
+### Test Edilen Akış
+- `_resolve_signature()` 4 senaryo: auto-fill / web off / manual override / her ikisi off → hepsi doğru.
+- Footer prompt çıktıları 4 template'te test edildi (match_day → classic, full_time → classic, motm → stack, special_day → band) → hepsi doğru.
+- 74/74 pytest passing.
+- UI screenshot: "MARKA İMZASI (OPSİYONEL)" bölümü AI Stüdyo'da görülüyor, Instagram auto-fill çalışıyor (`livanespor_test`), placement hint doğru görüntüleniyor.
+
+### Version
+v1.8.1 → **v1.9.0**
+
+
 ## 5l. 2026-05-03 — v1.8.1 CRITICAL Caption AI Rewrite
 
 ### Bug (reported by user)
