@@ -438,7 +438,7 @@ const AiStudio = () => {
                                 <div className="space-y-3">
                                     <div>
                                         <label className="liv-label">Maç Seç (otomatik doldur)</label>
-                                        <select className="liv-input" value={ctx._match_id || ""} onChange={(e) => {
+                                        <select className="liv-input" value={ctx._match_id || ""} onChange={async (e) => {
                                             const m = matches.find((mm) => mm.id === e.target.value);
                                             if (m) {
                                                 const TR_DAYS = ["PAZAR","PAZARTESİ","SALI","ÇARŞAMBA","PERŞEMBE","CUMA","CUMARTESİ"];
@@ -453,6 +453,21 @@ const AiStudio = () => {
                                                     stadium: m.venue, league_display: m.competition,
                                                     home_score: m.home_score, away_score: m.away_score,
                                                 }));
+                                                // Pre-fill crest reference slots from site_settings + opponent_clubs
+                                                try {
+                                                    const cr = await adminApi.resolveCrests(m.home_team, m.away_team);
+                                                    setRefs((r) => ({
+                                                        ...r,
+                                                        ...(cr.home_crest_url && !r.home_crest ? { home_crest: cr.home_crest_url } : {}),
+                                                        ...(cr.away_crest_url && !r.away_crest ? { away_crest: cr.away_crest_url } : {}),
+                                                    }));
+                                                    if (!cr.home_crest_url || !cr.away_crest_url) {
+                                                        const missing = [];
+                                                        if (!cr.home_crest_url) missing.push(m.home_team);
+                                                        if (!cr.away_crest_url) missing.push(m.away_team);
+                                                        toast.warning(`${missing.join(", ")} için logo bulunamadı — Rakip Kulüpler'den ekleyin veya elle yükleyin.`);
+                                                    }
+                                                } catch (_) {}
                                             } else { setCtxField("_match_id", ""); }
                                         }} data-testid="field-match">
                                             <option value="">— Elle gir —</option>

@@ -875,6 +875,47 @@ async def _auto_fill_match_crests(ctx: Dict[str, Any], reference_images: List[st
 async def admin_ai_templates(user=Depends(require_admin)):
     return ai_media.list_templates()
 
+
+class ResolveCrestsIn(BaseModel):
+    home_name: str
+    away_name: str
+
+
+@api_router.post("/admin/ai/resolve-crests")
+async def admin_ai_resolve_crests(payload: ResolveCrestsIn, user=Depends(require_admin)):
+    """Verilen ev sahibi/deplasman adına göre, kulübün kendi logosu (site_settings.logo_url)
+    ve opponent_clubs koleksiyonundan rakip logosunu döndürür. Frontend bu URL'leri
+    Referans Görseller kutularına önizleme olarak doldurur. Kullanıcı override edebilir."""
+    site = await db.site_settings.find_one({'id': 'main'}, {'_id': 0}) or {}
+    own_name = (site.get('site_title') or site.get('short_name') or 'Livanespor').strip().lower()
+    own_logo = site.get('logo_url')
+
+    async def _crest_for(name: str):
+        nl = (name or '').strip().lower()
+        if not nl:
+            return None, None
+        if nl == own_name or own_name in nl or nl in own_name:
+            return own_logo, "site_settings"
+        opps = await db.opponent_clubs.find({}, {'_id': 0}).to_list(500)
+        for o in opps:
+            on = (o.get('name') or '').strip().lower()
+            if on == nl:
+                return o.get('crest_url'), "opponent_clubs"
+        for o in opps:
+            on = (o.get('name') or '').strip().lower()
+            if on and (on in nl or nl in on):
+                return o.get('crest_url'), "opponent_clubs"
+        return None, None
+
+    h_url, h_src = await _crest_for(payload.home_name)
+    a_url, a_src = await _crest_for(payload.away_name)
+    return {
+        'home_crest_url': h_url,
+        'home_source': h_src,  # 'site_settings' | 'opponent_clubs' | None
+        'away_crest_url': a_url,
+        'away_source': a_src,
+    }
+
 @api_router.get("/admin/ai/design-options")
 async def admin_ai_design_options(user=Depends(require_admin)):
     """Return available DNA catalog options for the Özelleştir UI."""
