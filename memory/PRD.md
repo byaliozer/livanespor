@@ -1,3 +1,59 @@
+## 5l. 2026-05-03 — v1.8.1 CRITICAL Caption AI Rewrite
+
+### Bug (reported by user)
+Maç sonu görseli üretilirken: Ev sahibi **Livanespor 0 - 5 Mudanyaspor** (mağlubiyet) → Caption çıktısı: "karşısında 3 puan Livanespor'un!" şeklinde YANLIŞ galibiyet metni. Bu sorun muhtemelen diğer 9 şablonda da vardı.
+
+### Root Cause
+`caption_ai.py` içindeki `_result_tone()` fonksiyonu kulübü tespit ederken sorun yaratıyordu:
+```python
+home_is_us = (club_name or "").lower() in (ctx.get("home_name") or "").lower()
+```
+Kulüp adı `"Livanespor TEST"` olduğunda (site_settings'te test öneki), `home_name="Livanespor"` ile `"livanespor test" in "livanespor"` → **False**. Sistem Livanespor'u ev sahibi olarak tanıyamadığı için, karşı takımı "bizim" sanıyor ve `away_score=5` gol → "kazandık" çıkarımı yapıyordu.
+
+### Fix — Tamamen Yeniden Kurgulanan Caption AI (v2)
+`/app/backend/caption_ai.py` 195 → 380 satıra çıkarıldı. Yeni mimari:
+
+1. **Robust takım eşleştirme** (`_team_is_us`, `_build_our_names`):
+   - `site_title` + ilk kelimesi + `short_name` varyantları üretilir
+   - Her varyant: tam eşitlik → substring → normalize karşılaştırma
+   - "Livanespor TEST" de, "LIV" de, "Livanespor" de doğru şekilde own club tespit eder
+
+2. **Structured Facts Block** (`_compute_match_facts`):
+   - `we_are_home` bool (fuzzy match sonucu)
+   - `our_score` / `their_score` (perspektife göre)
+   - `outcome`: `"win"` | `"loss"` | `"draw"` | `"pending"` | `"neutral"`
+   - AI'a **dikte** edilir, yorumlatılmaz: "Skor: Livanespor 0 - 5 Mudanyaspor", "Sonuç: MAĞLUBİYET"
+
+3. **Outcome Directive** (`_outcome_directive`):
+   - Her `outcome` için farklı yazım emri ve **yasaklı kelime listesi**
+   - MAĞLUBİYET durumunda: "ASLA 'galibiyet', '3 puan bizim', 'zafer' yazma"
+   - BERABERLİK'te: "ASLA 'galibiyet' ya da 'mağlubiyet' yazma"
+   - GALİBİYET'te: "ASLA 'mağlubiyet', 'üzgünüz' yazma"
+   - PENDING (henüz oynanmamış): "ASLA sonuç/skor kelimesi kullanma"
+
+4. **Post-validation Banned Word Checker** (`_violates_outcome`):
+   - Caption üretildikten sonra, sonuç bazlı yasaklı kelime taraması yapılır
+   - Türkçe karakterler normalize edilerek (`ı→i`, `ğ→g` vb.) robust denetim
+   - Eğer yasaklı kelime bulunursa **otomatik retry** tetiklenir (stricter prompt suffix ile)
+   - İkinci üretim de başarısız olursa → **`_deterministic_fallback`** devreye girer (hand-crafted, kesinlikle doğru caption)
+
+5. **Per-template Data Assembly**: full_time, match_week, match_day, lineup, motm, birthday, special_day, new_transfer, fan_invite — her biri için template-specific facts çıkarılır.
+
+### Test Sonuçları (Gerçek API call ile)
+- **LOSS** (Livanespor 0-5 Mudanyaspor): İlk üretimde AI "üç puan" yazdı → **retry tetiklendi** → "Skor istediğimiz gibi olmadı; başımız dik, bir sonraki maça odaklanıyoruz" ✓
+- **WIN** (Livanespor 3-1 Mudanyaspor): "Üç puan bizim, tribüne teşekkürler" ✓
+- **DRAW** (Livanespor 2-2 Nilüfer): "Değerli bir puanla tamamladık. İleriye bakıyoruz" ✓
+- **UPCOMING** (match_week, skor yok): "Takım hazır, sıra tribünde!" skor/sonuç kelimesi kullanmadan ✓
+
+### Version
+- Backend caption_ai.py rewrite; server.py değişmedi (API yüzeyi aynı)
+- Frontend v1.8.0 → **v1.8.1**
+
+### Testing
+- 74/74 pytest passing
+- Manual verification via `asyncio.run()` test harness (4 scenarios)
+
+
 # Livanespor — Product Requirements Document
 
 **Project:** Livanespor Resmi Web Sitesi + Futbol Akademi + Admin Panel
