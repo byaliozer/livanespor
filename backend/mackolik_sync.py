@@ -109,6 +109,14 @@ def parse_standings(html: str) -> list[dict]:
         for tr in tbl.select("tbody tr[data-team-name]"):
             team_name = tr.get("data-team-name", "").strip()
             team_id = tr.get("data-team-id", "").strip()
+            # Try to extract logo from the row (defensive: multiple possible selectors)
+            logo_url = ""
+            img = tr.select_one("img.p0c-team__logo, img[src*='team'], img[src*='logo'], img")
+            if img and img.get("src"):
+                src = img.get("src")
+                if src.startswith("//"):
+                    src = "https:" + src
+                logo_url = src
             try:
                 rank = _to_int(tr.select_one(".p0c-competition-tables__rank").get_text(strip=True))
             except Exception:
@@ -135,6 +143,7 @@ def parse_standings(html: str) -> list[dict]:
                 "rank": rank,
                 "team_name": team_name,
                 "team_macko_id": team_id,
+                "logo_url": logo_url,
                 "played": o, "wins": g, "draws": b, "losses": m,
                 "goals_for": a, "goals_against": y,
                 "goal_difference": av, "points": p,
@@ -347,12 +356,13 @@ async def sync_to_db(db, team_id: str, team_name: str, options: dict) -> dict:
         "fetched": {k: len(payload[k]) if isinstance(payload[k], list) else 0
                     for k in ("standings", "fixtures", "squad")},
         "applied": {"standings": 0, "fixtures": 0, "players_updated": 0,
-                    "players_created": 0, "photos_updated": 0, "photos_skipped": 0},
+                    "players_created": 0, "photos_updated": 0, "photos_skipped": 0,
+                    "opponents_added": 0, "opponents_updated": 0},
         "warnings": [],
         "urls": payload["urls"],
     }
 
-    # Standings
+    # Standings + Auto-upsert opponent clubs (every non-own team in standings becomes a future opponent)
     if options.get("standings", True) and payload["standings"]:
         await db.standings.delete_many({})
         docs = []
@@ -360,7 +370,8 @@ async def sync_to_db(db, team_id: str, team_name: str, options: dict) -> dict:
             docs.append({
                 "id": _new_id(),
                 "rank": r["rank"], "team_name": r["team_name"],
-                "logo_url": "", "played": r["played"],
+                "logo_url": r.get("logo_url", ""),
+                "played": r["played"],
                 "wins": r["wins"], "draws": r["draws"], "losses": r["losses"],
                 "goals_for": r["goals_for"], "goals_against": r["goals_against"],
                 "goal_difference": r["goal_difference"], "points": r["points"],
@@ -372,6 +383,40 @@ async def sync_to_db(db, team_id: str, team_name: str, options: dict) -> dict:
         if docs:
             await db.standings.insert_many(docs)
         summary["applied"]["standings"] = len(docs)
+
+        # Upsert each NON-OWN standings row as an opponent_clubs entry
+        own_lower = (team_name or "").strip().lower()
+        own_first = own_lower.split()[0] if own_lower else ""
+        opp_added = 0; opp_updated = 0
+        for r in payload["standings"]:
+            tn = (r.get("team_name") or "").strip()
+            if not tn:
+                continue
+            tnl = tn.lower()
+            if tnl == own_lower or (own_first and (own_first in tnl or tnl in own_lower)):
+                continue  # Skip own club
+            existing = await db.opponent_clubs.find_one({"name": tn}, {"_id": 0})
+            if existing:
+                # Only update logo if currently empty/missing
+                set_fields = {"updated_at": _now(), "team_macko_id": r.get("team_macko_id", "")}
+                if r.get("logo_url") and not existing.get("crest_url"):
+                    set_fields["crest_url"] = r["logo_url"]
+                await db.opponent_clubs.update_one({"id": existing["id"]}, {"$set": set_fields})
+                opp_updated += 1
+            else:
+                await db.opponent_clubs.insert_one({
+                    "id": _new_id(),
+                    "name": tn,
+                    "crest_url": r.get("logo_url", ""),
+                    "city": "",
+                    "team_macko_id": r.get("team_macko_id", ""),
+                    "source": "mackolik_sync",
+                    "created_at": _now(),
+                    "updated_at": _now(),
+                })
+                opp_added += 1
+        summary["applied"]["opponents_added"] = opp_added
+        summary["applied"]["opponents_updated"] = opp_updated
 
     # Fixtures
     if options.get("fixtures", True) and payload["fixtures"]:
