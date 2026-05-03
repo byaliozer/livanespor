@@ -168,6 +168,9 @@ def _style_header(theme: str, primary: str, secondary: str, bg: str) -> list[str
     ]
 
 
+_DR_AI_BRAND_LOGO_URL = "https://customer-assets.emergentagent.com/job_e3c41e44-f658-4a09-9344-a2e1f942a7ee/artifacts/8ntz1cbb_drailogo-1.png"
+
+
 # Template-key → signature footer placement preset (user's "d. akıllı karar" choice):
 # classic  → website bottom-left, instagram bottom-right (maç temelli şablonlar)
 # stack    → both stacked on bottom-right (portrait-heavy templates)
@@ -185,27 +188,25 @@ _SIGNATURE_PLACEMENT = {
 }
 
 
-def _resolve_signature(ctx: dict, s: dict) -> Tuple[Optional[str], Optional[str]]:
+def _resolve_signature(ctx: dict, s: dict) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """Read the admin's per-job preferences from ctx, fall back to site_settings.
-    Returns (website_text_or_None, instagram_handle_or_None).
+    Returns (website_text_or_None, instagram_handle_or_None, brand_logo_url_or_None).
     ctx may contain:
-      - show_website: bool (default True if any source provides a value)
-      - website_text: str (manual override)
-      - show_instagram: bool
-      - instagram_text: str (manual override)
+      - show_website / website_text
+      - show_instagram / instagram_text
+      - show_brand_logo / brand_logo_url (defaults to _DR_AI_BRAND_LOGO_URL)
     """
     # Website
     show_web = ctx.get("show_website", True)
     web_override = (ctx.get("website_text") or "").strip()
     web_default = (s.get("website") or s.get("site_url") or "").strip()
-    # Normalize: strip leading "http(s)://" and trailing slash
     def _norm_url(u: str) -> str:
         if not u: return ""
         u = u.strip()
         for pref in ("https://", "http://"):
             if u.lower().startswith(pref): u = u[len(pref):]
         return u.rstrip("/")
-    website = _norm_url(web_override) or _norm_url(web_default) if show_web else None
+    website = (_norm_url(web_override) or _norm_url(web_default)) if show_web else None
     if not website:
         website = None
 
@@ -216,22 +217,50 @@ def _resolve_signature(ctx: dict, s: dict) -> Tuple[Optional[str], Optional[str]
     instagram = (ig_override or ig_default) if show_ig else None
     if not instagram:
         instagram = None
-    return website, instagram
+
+    # DR AI Futbol brand logo (or admin-specified override URL)
+    show_brand = ctx.get("show_brand_logo", True)
+    brand_override = (ctx.get("brand_logo_url") or "").strip()
+    brand_logo = (brand_override or _DR_AI_BRAND_LOGO_URL) if show_brand else None
+
+    return website, instagram, brand_logo
 
 
-def _footer_lines(template_key: str, website: Optional[str], instagram: Optional[str]) -> list[str]:
-    """Return prompt lines that describe how the signature footer should be rendered,
-    based on the template's placement preset. If neither value is supplied, return
-    an instruction to draw NO footer content at all (clean edge)."""
+def _footer_lines(template_key: str, website: Optional[str], instagram: Optional[str], brand_logo: Optional[str] = None) -> list[str]:
+    """Return prompt lines that describe how the signature footer should be rendered.
+    - If brand_logo is provided, it ALWAYS sits at the bottom-center (under the main layout).
+      Website → bottom-left, Instagram → bottom-right (three-element row).
+    - If brand_logo is None, falls back to per-template placement preset (classic/stack/band).
+    - If nothing is provided, explicit "no footer content" instruction."""
     handle = f"@{instagram}" if instagram else ""
     placement = _SIGNATURE_PLACEMENT.get(template_key, "classic")
 
-    if not website and not handle:
+    if not website and not handle and not brand_logo:
         return [
-            "• FOOTER — CLEAN. Do NOT render any website URL, any @handle, or any social-media text. "
-            "Leave the bottom edge uncluttered (no divider needed unless required by composition).",
+            "• FOOTER — CLEAN. Do NOT render any website URL, any @handle, any brand logo, or any "
+            "social-media text. Leave the bottom edge uncluttered.",
         ]
 
+    # Brand logo present → force three-zone row: LEFT=website, CENTER=brand, RIGHT=instagram
+    if brand_logo:
+        lines = [
+            "• FOOTER — BOTTOM OF THE POSTER, thin accent-color divider line, then three equal zones:",
+            "  - CENTER: place the LAST reference image EXACTLY AS-IS (this is the DR AI FUTBOL brand/attribution logo). "
+            "Render it small (approx 10-14% of the poster width), horizontally centered along the bottom edge, "
+            "preserving its original colors, transparency and proportions. DO NOT redraw, DO NOT add glow, DO NOT alter.",
+        ]
+        if website:
+            lines.append(f"  - BOTTOM-LEFT: website url \"{website}\" in accent color, small uppercase, subtle tracking, aligned to the same baseline as the center logo.")
+        else:
+            lines.append("  - BOTTOM-LEFT: empty. Do NOT invent a website.")
+        if handle:
+            lines.append(f"  - BOTTOM-RIGHT: instagram handle \"{handle}\" in accent color, small uppercase, same baseline as website and logo.")
+        else:
+            lines.append("  - BOTTOM-RIGHT: empty. Do NOT invent a handle.")
+        lines.append("  - The three zones must be equally padded and NOT overlap any central subject above them.")
+        return lines
+
+    # No brand logo → original per-template placement behaviour
     if placement == "classic":
         if website and handle:
             return [
@@ -312,7 +341,7 @@ def build_match_day(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple[
     primary = s.get("primary_color") or "#f5dc4c"
     secondary = s.get("secondary_color") or "#ffffff"
     bg = s.get("bg_color") or "#0b0b0b"
-    website, instagram = _resolve_signature(ctx, s)
+    website, instagram, brand_logo = _resolve_signature(ctx, s)
 
     parts = ["Create a premium, cinematic 1:1 square football MATCH DAY poster.",
              *_style_header(theme, primary, secondary, bg)]
@@ -344,7 +373,7 @@ def build_match_day(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple[
     if stadium: parts.append(f"  - \"STAT\":  \"{stadium.upper()}\".")
     parts.append("  All values must FIT inside slot with padding; NEVER overflow.")
     parts += [""]
-    parts += _footer_lines("match_day", website, instagram)
+    parts += _footer_lines("match_day", website, instagram, brand_logo)
     parts += _typography_rules()
     if team_photo:
         parts.append("• Preserve the real team photo faces — do NOT generate fictional players.")
@@ -414,7 +443,7 @@ def build_full_time(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple[
     primary = s.get("primary_color") or "#f5dc4c"
     secondary = s.get("secondary_color") or "#ffffff"
     bg = s.get("bg_color") or "#0b0b0b"
-    website, instagram = _resolve_signature(ctx, s)
+    website, instagram, brand_logo = _resolve_signature(ctx, s)
 
     pen = " (Penaltılar sonucu)" if str(score_type).lower() == "penalty" else ""
     parts = [
@@ -447,7 +476,7 @@ def build_full_time(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple[
     if has_goals:
         parts += _full_time_goal_panel(home, away, hgl, agl)
     parts += _full_time_info_panel(date, time_, stadium)
-    parts += _footer_lines("full_time", website, instagram)
+    parts += _footer_lines("full_time", website, instagram, brand_logo)
     parts += _typography_rules()
     parts += [
         "",
@@ -493,7 +522,7 @@ def build_lineup(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple[str
     primary = s.get("primary_color") or "#f5dc4c"
     secondary = s.get("secondary_color") or "#ffffff"
     bg = s.get("bg_color") or "#0b0b0b"
-    website, instagram = _resolve_signature(ctx, s)
+    website, instagram, brand_logo = _resolve_signature(ctx, s)
 
     parts = [
         "Create a premium 1:1 square STARTING XI tactics board poster.",
@@ -542,7 +571,7 @@ def build_lineup(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple[str
     if stadium: info_bits.append(stadium.upper())
     if info_bits:
         parts.append(f"\n• BOTTOM info strip — single thin uppercase line: \"{' · '.join(info_bits)}\".")
-    parts += _footer_lines("lineup", website, instagram)
+    parts += _footer_lines("lineup", website, instagram, brand_logo)
     parts += _typography_rules()
     parts.append("• Do not draw real faces — only jersey/number tokens per slot.")
     return "\n".join(parts), f"İlk 11 — {formation}"
@@ -558,7 +587,7 @@ def build_motm(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple[str, 
     theme = ctx.get("theme", "dramatik")
     primary = s.get("primary_color") or "#f5dc4c"; secondary = s.get("secondary_color") or "#ffffff"
     bg = s.get("bg_color") or "#0b0b0b"
-    website, instagram = _resolve_signature(ctx, s)
+    website, instagram, brand_logo = _resolve_signature(ctx, s)
 
     parts = [
         "Create a premium cinematic 1:1 MAN OF THE MATCH hero portrait poster.",
@@ -583,7 +612,7 @@ def build_motm(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple[str, 
         parts.append(f"  - Below name, smaller accent-color: \"{position.upper()}\".")
     if match_context:
         parts.append(f"  - Bottom of panel: \"{match_context}\" (small white).")
-    parts += _footer_lines("motm", website, instagram)
+    parts += _footer_lines("motm", website, instagram, brand_logo)
     parts += _typography_rules(no_extra_logos=False)
     parts.append("• Only ONE person in poster — no crowd faces, no other players.")
     return "\n".join(parts), f"Maçın Adamı — {name}"
@@ -600,7 +629,7 @@ def build_birthday(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple[s
     theme = ctx.get("theme", "enerjik")
     primary = s.get("primary_color") or "#f5dc4c"; secondary = s.get("secondary_color") or "#ffffff"
     bg = s.get("bg_color") or "#0b0b0b"
-    website, instagram = _resolve_signature(ctx, s)
+    website, instagram, brand_logo = _resolve_signature(ctx, s)
 
     parts = [
         "Create a premium cinematic 1:1 square BIRTHDAY greeting poster for a football club.",
@@ -625,7 +654,7 @@ def build_birthday(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple[s
         parts.append(f"  - Giant translucent \"{age}\" behind name as watermark (low opacity, accent color).")
     if wish:
         parts.append(f"  - Italic white blockquote below: \"{wish}\" (max 3 lines).")
-    parts += _footer_lines("birthday", website, instagram)
+    parts += _footer_lines("birthday", website, instagram, brand_logo)
     parts += _typography_rules(no_extra_logos=False)
     parts.append("• Only ONE person — no crowd, no other faces.")
     return "\n".join(parts), f"Doğum Günü — {name}"
@@ -639,7 +668,7 @@ def build_special_day(ctx: dict, s: dict, design: Optional[dict] = None) -> Tupl
     theme = ctx.get("theme", "dramatik")
     primary = s.get("primary_color") or "#f5dc4c"; secondary = s.get("secondary_color") or "#ffffff"
     bg = s.get("bg_color") or "#0b0b0b"
-    website, instagram = _resolve_signature(ctx, s)
+    website, instagram, brand_logo = _resolve_signature(ctx, s)
 
     parts = [
         "Create a premium 1:1 square SPECIAL DAY / HOLIDAY football club poster.",
@@ -656,7 +685,7 @@ def build_special_day(ctx: dict, s: dict, design: Optional[dict] = None) -> Tupl
     ]
     if body_text:
         parts.append(f"• Below heading — 2-3 lines max, clean white: \"{body_text}\".")
-    parts += _footer_lines("special_day", website, instagram)
+    parts += _footer_lines("special_day", website, instagram, brand_logo)
     parts += _typography_rules(no_extra_logos=False)
     parts.append("• Editorial magazine layout, not an Instagram template. No players, no match data.")
     return "\n".join(parts), f"Özel Gün — {title}"
@@ -671,7 +700,7 @@ def build_new_transfer(ctx: dict, s: dict, design: Optional[dict] = None) -> Tup
     theme = ctx.get("theme", "enerjik")
     primary = s.get("primary_color") or "#f5dc4c"; secondary = s.get("secondary_color") or "#ffffff"
     bg = s.get("bg_color") or "#0b0b0b"
-    website, instagram = _resolve_signature(ctx, s)
+    website, instagram, brand_logo = _resolve_signature(ctx, s)
 
     parts = [
         "Create a premium 1:1 square NEW SIGNING announcement football poster.",
@@ -687,7 +716,7 @@ def build_new_transfer(ctx: dict, s: dict, design: Optional[dict] = None) -> Tup
     if number: parts.append(f"• Jersey: \"#{number}\" prominent.")
     if position: parts.append(f"• Position: \"{position.upper()}\".")
     if from_club: parts.append(f"• \"Önceki kulüp: {from_club.upper()}\" (small).")
-    parts += _footer_lines("new_transfer", website, instagram)
+    parts += _footer_lines("new_transfer", website, instagram, brand_logo)
     parts += _typography_rules(no_extra_logos=False)
     return "\n".join(parts), f"Yeni Transfer — {name or '?'}"
 
@@ -719,7 +748,7 @@ def build_fan_invite(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple
     primary = s.get("primary_color") or "#f5dc4c"
     secondary = s.get("secondary_color") or "#ffffff"
     bg = s.get("bg_color") or "#0b0b0b"
-    website, instagram = _resolve_signature(ctx, s)
+    website, instagram, brand_logo = _resolve_signature(ctx, s)
 
     parts = [
         "Create a premium 1:1 square FAN INVITATION football poster (supporter mobilization).",
@@ -757,7 +786,7 @@ def build_fan_invite(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple
         "",
         "• BACKGROUND — packed tribune at night, raised fan silhouettes, smoke flares in club colors, atmospheric haze.",
     ]
-    parts += _footer_lines("fan_invite", website, instagram)
+    parts += _footer_lines("fan_invite", website, instagram, brand_logo)
     parts += _typography_rules(no_extra_logos=True)
     parts += _strict_global_rules()
     parts += [

@@ -123,6 +123,8 @@ const DesignCustomizer = ({ options, custom, setCustom, values, setValues }) => 
     </div>
 );
 
+const DR_AI_BRAND_LOGO_URL = "https://customer-assets.emergentagent.com/job_e3c41e44-f658-4a09-9344-a2e1f942a7ee/artifacts/8ntz1cbb_drailogo-1.png";
+
 // Template-level placement hint shown to admin (matches backend _SIGNATURE_PLACEMENT)
 const SIGNATURE_PLACEMENT_LABEL = {
     match_week:   "Sol alt köşe · Sağ alt köşe",
@@ -141,21 +143,26 @@ const SignatureBlock = ({ templateKey, siteS, ctx, setCtxField }) => {
     const defaultIg  = (siteS?.instagram_username || (siteS?.social || {}).instagram || "").trim();
     const showWeb = ctx.show_website !== false;
     const showIg  = ctx.show_instagram !== false;
+    const showBrand = ctx.show_brand_logo !== false;
     const webVal = ctx.website_text !== undefined ? ctx.website_text : defaultWeb;
     const igVal  = ctx.instagram_text !== undefined ? ctx.instagram_text : defaultIg;
+    const brandVal = ctx.brand_logo_url !== undefined ? ctx.brand_logo_url : DR_AI_BRAND_LOGO_URL;
     const placement = SIGNATURE_PLACEMENT_LABEL[templateKey] || "Sol alt · Sağ alt";
+    const brandActive = showBrand;
+    // When brand is active, layout forced to 3-zone: SOL=web · ORTA=brand · SAĞ=instagram
+    const effectivePlacement = brandActive ? "Sol alt · DR AI FUTBOL · Sağ alt" : placement;
 
     return (
         <div className="bg-liv-card border border-liv-border p-6 space-y-3" data-testid="signature-block">
             <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
                     <h3 className="font-display text-lg uppercase">Marka İmzası (opsiyonel)</h3>
-                    <p className="text-[11px] text-neutral-400 mt-1">Görselin alt kısmına web sitesi ve Instagram yazılır. Boş bırakırsan Site Ayarları'ndan otomatik alınır.</p>
+                    <p className="text-[11px] text-neutral-400 mt-1">Görselin alt kısmına web sitesi, DR AI FUTBOL logosu ve Instagram yazılır. Boş bıraktığın alanlar Site Ayarları'ndan otomatik alınır.</p>
                 </div>
-                <div className="text-[10px] uppercase tracking-widest text-liv-yellow" data-testid="signature-placement-hint">Konum: {placement}</div>
+                <div className="text-[10px] uppercase tracking-widest text-liv-yellow" data-testid="signature-placement-hint">Konum: {effectivePlacement}</div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="border border-liv-border bg-liv-surface p-3 rounded-sm">
                     <label className="flex items-center gap-2 cursor-pointer text-sm">
                         <input type="checkbox" checked={showWeb} onChange={(e) => setCtxField("show_website", e.target.checked)} className="accent-liv-yellow" data-testid="signature-show-web" />
@@ -173,6 +180,31 @@ const SignatureBlock = ({ templateKey, siteS, ctx, setCtxField }) => {
                     {defaultWeb && ctx.website_text !== undefined && ctx.website_text !== defaultWeb && (
                         <button type="button" onClick={() => setCtxField("website_text", undefined)} className="text-[10px] text-liv-yellow hover:underline mt-1 uppercase tracking-widest">Site Ayarları'nı kullan ({defaultWeb})</button>
                     )}
+                </div>
+
+                <div className="border border-liv-border bg-liv-surface p-3 rounded-sm">
+                    <label className="flex items-center gap-2 cursor-pointer text-sm">
+                        <input type="checkbox" checked={showBrand} onChange={(e) => setCtxField("show_brand_logo", e.target.checked)} className="accent-liv-yellow" data-testid="signature-show-brand" />
+                        <span className="font-semibold text-neutral-200">DR AI FUTBOL logosu ekle</span>
+                    </label>
+                    <div className="mt-2 flex items-center gap-2">
+                        <img src={brandVal} alt="DR AI FUTBOL" className={`h-10 w-16 object-contain bg-black border border-liv-border ${!showBrand ? "opacity-30" : ""}`} data-testid="signature-brand-preview" />
+                        <div className="flex-1">
+                            <input
+                                type="text"
+                                className="liv-input !py-1.5 text-xs"
+                                value={brandVal}
+                                onChange={(e) => setCtxField("brand_logo_url", e.target.value)}
+                                placeholder="Logo URL"
+                                disabled={!showBrand}
+                                data-testid="signature-brand-input"
+                            />
+                            {ctx.brand_logo_url !== undefined && ctx.brand_logo_url !== DR_AI_BRAND_LOGO_URL && (
+                                <button type="button" onClick={() => setCtxField("brand_logo_url", undefined)} className="text-[10px] text-liv-yellow hover:underline mt-1 uppercase tracking-widest">Varsayılana dön</button>
+                            )}
+                        </div>
+                    </div>
+                    <p className="text-[10px] text-neutral-500 mt-1">Seçili ise görselin alt ortasına yerleşir.</p>
                 </div>
 
                 <div className="border border-liv-border bg-liv-surface p-3 rounded-sm">
@@ -196,7 +228,10 @@ const SignatureBlock = ({ templateKey, siteS, ctx, setCtxField }) => {
             </div>
 
             {!defaultWeb && !defaultIg && (
-                <p className="text-[11px] text-amber-300">ℹ Varsayılan değerler için <strong>Site Ayarları → Sosyal Medya</strong> bölümüne Web Sitesi ve Instagram ekleyin.</p>
+                <p className="text-[11px] text-amber-300">ℹ Web/Instagram varsayılanları için <strong>Site Ayarları → Sosyal Medya</strong> bölümüne değer ekleyin.</p>
+            )}
+            {brandActive && (
+                <p className="text-[11px] text-liv-yellow/80">ℹ DR AI FUTBOL logosu aktif: Yerleşim sol alt web, orta logo, sağ alt Instagram düzenine geçer. (Şablon-bazlı varsayılan konum geçici olarak değişir.)</p>
             )}
         </div>
     );

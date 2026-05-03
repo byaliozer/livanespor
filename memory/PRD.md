@@ -1,3 +1,47 @@
+## 5n. 2026-05-03 — v1.10.0 DR AI FUTBOL Brand Logo · 3. Marka İmzası Seçeneği
+
+### Kullanıcı talebi
+"Bir soru daha: Görsel DR AI FUTBOL tarafından oluşturulmuştur hissi için logo yükledim. Yönetici tik seçerse görsele eklensin. Hem web + DR AI + instagram seçili ise → sol alt web, orta DR AI logosu, sağ alt instagram."
+
+### Backend — `/app/backend/ai_media.py`
+- `_DR_AI_BRAND_LOGO_URL` constant: kullanıcının yüklediği PNG URL'i (`customer-assets.../8ntz1cbb_drailogo-1.png`)
+- `_resolve_signature(ctx, s)` artık 3-tuple döndürüyor: `(website, instagram, brand_logo)`
+  - `show_brand_logo` (default True)
+  - `brand_logo_url` override
+- `_footer_lines(template_key, website, instagram, brand_logo)` — yeni davranış:
+  - **Brand aktif ise** (3-zone row, tüm şablonlarda tutarlı):
+    - CENTER: "place the LAST reference image EXACTLY AS-IS" (küçük, 10-14% poster width)
+    - BOTTOM-LEFT: website
+    - BOTTOM-RIGHT: instagram
+    - Halüsinasyon önlemi: "DO NOT redraw, DO NOT add glow, DO NOT alter"
+  - **Brand kapalı ise** → eski template-bazlı placement preset (classic/stack/band) devrede
+
+### Backend — `/app/backend/server.py`
+- `_run_ai_job` içinde brand_logo URL'i `reference_images` listesinin **sonuna** otomatik ekleniyor (`ai_media._resolve_signature(ctx, site)` kullanarak). Böylece OpenAI `images.edit` bunu LAST reference olarak alır ve prompt'taki "CENTER = LAST reference" talimatını uygular.
+
+### Frontend — `AiStudio.jsx` `SignatureBlock`
+- 2 kart → **3 karta** genişletildi: Web · DR AI FUTBOL · Instagram
+- DR AI FUTBOL kartı:
+  - Checkbox (default AÇIK)
+  - Küçük logo önizlemesi (16×10px)
+  - URL override input (admin farklı logo yüklemek isterse)
+  - "Varsayılana dön" butonu
+- Dinamik placement hint: Brand aktifken "Konum: Sol alt · DR AI FUTBOL · Sağ alt" olarak değişir (şablon-bazlı default'u override ettiğini admin görür)
+- Sarı bilgi bar: "DR AI FUTBOL logosu aktif: Yerleşim sol alt web, orta logo, sağ alt Instagram düzenine geçer"
+
+### Test Sonuçları
+- 4 senaryo: default all-on, brand off, brand override, stack template + brand → hepsi doğru prompt üretiyor
+- Motm (stack preset) brand aktif iken classic 3-zone'a geçiyor — kullanıcı talebi
+- 74/74 pytest passing
+- UI screenshot doğrulaması: 3 kart görünüyor, brand checkbox checked=True, logo preview render oluyor, placement hint "SOL ALT · DR AI FUTBOL · SAĞ ALT"
+
+### Version
+v1.9.0 → **v1.10.0**
+
+### Hotfix
+- Önceki `setSiteS is not defined` hatası çözüldü: state tanımı eksikti, tekrar eklendi + frontend restart
+
+
 ## 5m. 2026-05-03 — v1.9.0 Marka İmzası (Website + Instagram) · Tüm 9 Şablon
 
 ### Kullanıcı talebi

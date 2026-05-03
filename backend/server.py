@@ -1045,6 +1045,11 @@ async def _run_ai_job(job_id: str):
         ref_slots = tpl_for_refs.get('reference_slots') or []
         if 'home_crest' in ref_slots and 'away_crest' in ref_slots:
             ref_images_raw = await _auto_fill_match_crests(ctx, ref_images_raw)
+        # Append DR AI Futbol brand logo as the LAST reference image (if enabled)
+        # The footer prompt tells the model to use the LAST reference as the center brand logo.
+        _, _, brand_logo_url = ai_media._resolve_signature(ctx, site)
+        if brand_logo_url:
+            ref_images_raw = list(ref_images_raw) + [brand_logo_url]
         ref_bytes: List[bytes] = []
         for ref in ref_images_raw:
             try:
