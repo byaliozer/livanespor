@@ -1,4 +1,5 @@
 import CrudPage from "@/components/admin/CrudPage";
+import { formatDateTR, formatTimeTR } from "@/lib/dateFormat";
 
 const fields = [
     { name: "competition", label: "Lig / Turnuva" },
@@ -18,7 +19,7 @@ const fields = [
     { name: "opponent_logo", label: "Rakip Logo URL", fullWidth: true },
 ];
 const columns = [
-    { key: "match_date", label: "Tarih", render: (r) => r.match_date ? new Date(r.match_date).toLocaleString("tr-TR") : "—" },
+    { key: "match_date", label: "Tarih", render: (r) => r.match_date ? `${formatDateTR(r.match_date)} ${formatTimeTR(r.match_date)}` : "—" },
     { key: "home_team", label: "Ev" },
     { key: "away_team", label: "Deplasman" },
     { key: "status", label: "Durum" },

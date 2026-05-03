@@ -8,6 +8,7 @@ import {
 import { toast } from "sonner";
 import { Lightbox } from "@/components/admin/Lightbox";
 import { FieldHelpPanel } from "@/components/admin/FieldHelpPanel";
+import { formatDateTR, formatTimeTR } from "@/lib/dateFormat";
 
 // URL helper for public media proxy
 const mediaAbsUrl = (pathOrDataUrl) => {
@@ -446,8 +447,8 @@ const AiStudio = () => {
                                                 setCtx((c) => ({
                                                     ...c, _match_id: m.id,
                                                     home_name: m.home_team, away_name: m.away_team,
-                                                    date_str: (m.match_date || "").slice(0, 10),
-                                                    time_str: (m.match_date || "").slice(11, 16),
+                                                    date_str: formatDateTR(m.match_date),
+                                                    time_str: formatTimeTR(m.match_date),
                                                     day_str: dayStr,
                                                     stadium: m.venue, league_display: m.competition,
                                                     home_score: m.home_score, away_score: m.away_score,
@@ -455,7 +456,7 @@ const AiStudio = () => {
                                             } else { setCtxField("_match_id", ""); }
                                         }} data-testid="field-match">
                                             <option value="">— Elle gir —</option>
-                                            {matches.map((m) => <option key={m.id} value={m.id}>{`${(m.match_date || "").slice(0, 10)} · ${m.home_team} vs ${m.away_team} (${m.status})`}</option>)}
+                                            {matches.map((m) => <option key={m.id} value={m.id}>{`${formatDateTR(m.match_date)} · ${m.home_team} vs ${m.away_team} (${m.status})`}</option>)}
                                         </select>
                                     </div>
                                     <div className="grid grid-cols-2 gap-3">
