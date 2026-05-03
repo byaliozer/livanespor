@@ -359,3 +359,52 @@ GoDaddy livanespor.com → Emergent deployment domain bağlama:
 - Subscription/Credit routes (~140 lines) → `subscription_routes.py`
 - Media upload/archive routes (~80 lines) → `media_routes.py`
 - After all extractions, server.py would reduce to ~800 lines (auth + public + CRUD factory + AI generate + wiring)
+
+## 5k. 2026-05-03 — v1.8.0 Role Management + DR AI Image 2 Rebrand + Caption Polling
+
+### Role System (Kullanıcı talebi)
+- **Two-role model**: Süper Admin (Ali Özer, proje sahibi) + Yönetici (kulüp yöneticisi).
+- Backend: New `require_super_admin` dependency in `/app/backend/server.py`. Protects:
+  - `GET  /api/admin/ai-settings` (super-only read)
+  - `PUT  /api/admin/ai-settings` (super-only write)
+  - `PUT  /api/admin/subscription/plan`
+  - `POST /api/admin/subscription/credit-adjust`
+  - `GET  /api/auth/users`
+  - (Existing: `POST /api/auth/users` has inline super-check)
+- Frontend `AdminLayout.jsx`: NAV items with `superOnly:true` flag (Paketim, Kullanıcılar) are hidden for non-super-admin users. Role label mapped via `ROLE_LABEL` (super_admin → "Süper Admin", admin → "Yönetici").
+- Frontend `Users.jsx`: Create user form simplified to only create "Yönetici" (admin role). Role select dropdown removed; role hard-coded to `admin`. Email field renamed to "Kullanıcı Adı".
+- Frontend `Settings.jsx`: New "DR AI Image 2 Ayarları" section at bottom, rendered **only if `user.role === 'super_admin'`**. AI API key management moved here from AI Görsel page.
+
+### DR AI Image 2 Rebrand
+- `AiStudio.jsx`: Page title "Şablon Üretici" → "AI Stüdyo" (h1). Subtitle "9 hazır şablon · Design DNA · Varyasyon (1 veya 3) · Referans görsel destekli gpt-image-2. Her varyasyon 1 kredi." → "DR AI Image 2 — Her görsel 1 kredi harcar."
+- Job card "gpt-image-2 çalışıyor" → "DR AI Image 2 çalışıyor"
+- `AiPanel.jsx`: Model name "gpt-image-2" → "DR AI Image 2" in toasts + history badges.
+- `AdminLayout.jsx` sidebar:
+  - "AI Görsel (Prompt)" → "AI Görsel"
+  - "AI Stüdyo (Şablonlar)" → "AI Stüdyo"
+
+### AI Görsel page — Reference photo upload
+- `AiPanel.jsx` completely rebuilt (AI Ayarları block removed → moved to Settings).
+- New `RefSlot` component: 3 drag-and-drop reference photo slots (max 5MB each).
+- User can upload reference photos to guide AI generation (e.g. player portrait style, stadium photo, kit reference).
+- Backend `AiGenerateIn` Pydantic model extended with `reference_images: Optional[List[str]]`.
+- Backend `admin_ai_generate`: If refs provided, uses `oclient.images.edit(model="gpt-image-2", image=files, ...)` with fallback to `gpt-image-1`. If no refs, uses `images.generate` as before.
+
+### Caption Polling Fix (kullanıcı raporu)
+**Problem**: Görsel üretildikten sonra caption yazısı hazırlanırken kullanıyor "hazırlanıyor…"da kalıyor, ancak sayfa refresh edilince görünüyor. Caption async olarak resim tamamlandıktan SONRA üretiliyor.
+**Fix**: `AiStudio.jsx` polling useEffect genişletildi:
+- Eski koşul: jobs has pending/processing → poll her 3 saniye
+- Yeni koşul: **EK OLARAK** success jobs içinde `social_caption` eksik ve `finished_at` < 2 dakika önceyse poll devam et
+- Ek yeni effect: Lightbox açıkken, jobs her polling'de güncellendiğinde lbItems'ı da senkronize ediyor (yeni gelen caption'ı lightbox'a yansıtıyor)
+- Sonuç: Kullanıcı refresh etmeden caption otomatik gösteriliyor (image + 5-30sn)
+
+### Testing
+- 74/74 backend pytest passing
+- Role enforcement manual-tested: Yönetici rolü `/api/admin/ai-settings`, subscription/plan, subscription/credit-adjust, /auth/users → 403. Dashboard stats, posts list, subscription read → 200.
+- Screenshot: AI Stüdyo header "AI STÜDYO" + "DR AI Image 2 — Her görsel 1 kredi harcar." ✓
+- Screenshot: AI Görsel sayfası "AI GÖRSEL" + 3 "FOTO EKLE" reference slot + no AI Settings block ✓
+- Screenshot: Settings AI section "DR AI IMAGE 2 AYARLARI" visible for super_admin ✓
+
+### Version
+- `/app/frontend/src/version.js`: v1.7.1 → **v1.8.0**
+

@@ -10,6 +10,7 @@ import {
 
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_401d88f4-8dae-48a8-9716-45cb5be0ec5c/artifacts/4x1k75zi_Livanespor_SARI_SIYAH_NEW%20genelde%20bu.png";
 
+// superOnly: only super_admin can see; everyone else (admin = "Yönetici") cannot.
 const NAV = [
     { to: "/admin/dashboard", label: "Panel", icon: LayoutDashboard, group: "Genel" },
     { to: "/admin/slides", label: "Hero Slider", icon: Layers, group: "İçerik" },
@@ -27,13 +28,22 @@ const NAV = [
     { to: "/admin/messages", label: "Mesajlar", icon: Mail, group: "İletişim" },
     { to: "/admin/media", label: "Medya Arşivi", icon: Image, group: "İçerik" },
     { to: "/admin/team-photos", label: "Takım Fotoğrafları", icon: Image, group: "İçerik" },
-    { to: "/admin/ai", label: "AI Görsel (Prompt)", icon: Wand2, group: "İçerik" },
-    { to: "/admin/ai-studio", label: "AI Stüdyo (Şablonlar)", icon: Wand2, group: "İçerik" },
-    { to: "/admin/paketim", label: "Paketim", icon: Package, group: "Sistem" },
-    { to: "/admin/users", label: "Kullanıcılar", icon: ShieldQuestion, group: "Sistem" },
+    { to: "/admin/ai", label: "AI Görsel", icon: Wand2, group: "İçerik" },
+    { to: "/admin/ai-studio", label: "AI Stüdyo", icon: Wand2, group: "İçerik" },
+    { to: "/admin/paketim", label: "Paketim", icon: Package, group: "Sistem", superOnly: true },
+    { to: "/admin/users", label: "Kullanıcılar", icon: ShieldQuestion, group: "Sistem", superOnly: true },
     { to: "/admin/account", label: "Hesap Ayarları", icon: KeyRound, group: "Sistem" },
     { to: "/admin/settings", label: "Site Ayarları", icon: Settings, group: "Sistem" },
 ];
+
+const ROLE_LABEL = {
+    super_admin: "Süper Admin",
+    admin: "Yönetici",
+    editor: "Editör",
+    media_lead: "Medya Sorumlusu",
+    academy_lead: "Akademi Sorumlusu",
+    sponsor_lead: "Sponsor Sorumlusu",
+};
 
 const AdminLayout = ({ children }) => {
     const { user, loading, logout } = useAuth();
@@ -47,7 +57,9 @@ const AdminLayout = ({ children }) => {
     if (loading) return <div className="min-h-screen bg-liv-black flex items-center justify-center text-neutral-400">Yükleniyor…</div>;
     if (!user) return null;
 
-    const groups = NAV.reduce((acc, n) => { (acc[n.group] = acc[n.group] || []).push(n); return acc; }, {});
+    const isSuper = user.role === "super_admin";
+    const visibleNav = NAV.filter((n) => !n.superOnly || isSuper);
+    const groups = visibleNav.reduce((acc, n) => { (acc[n.group] = acc[n.group] || []).push(n); return acc; }, {});
 
     return (
         <div className="min-h-screen bg-liv-black text-white flex" data-testid="admin-layout">
@@ -85,7 +97,7 @@ const AdminLayout = ({ children }) => {
                     <div className="px-2 py-2">
                         <div className="text-xs text-neutral-500">Giriş yapan</div>
                         <div className="text-sm font-semibold truncate">{user.name}</div>
-                        <div className="text-[10px] text-liv-yellow uppercase tracking-widest">{user.role}</div>
+                        <div className="text-[10px] text-liv-yellow uppercase tracking-widest" data-testid="admin-role-label">{ROLE_LABEL[user.role] || user.role}</div>
                     </div>
                     <button onClick={() => { logout(); navigate("/admin"); }} className="w-full flex items-center gap-2 px-2 py-2 text-sm text-neutral-300 hover:bg-liv-card hover:text-liv-yellow rounded" data-testid="admin-logout">
                         <LogOut className="w-4 h-4" /> Çıkış Yap

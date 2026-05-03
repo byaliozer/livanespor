@@ -88,6 +88,12 @@ async def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dic
         raise HTTPException(status_code=403, detail="Yetkisiz erişim")
     return user
 
+async def require_super_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """Only super_admin can access: AI settings, subscription plan, credit adjust, user management."""
+    if user.get('role') != 'super_admin':
+        raise HTTPException(status_code=403, detail="Bu işlem yalnızca Süper Admin tarafından yapılabilir")
+    return user
+
 def make_slug(text: str, prefix: str = "") -> str:
     base = slugify(text or "icerik", lowercase=True)
     return f"{prefix}{base}-{uuid.uuid4().hex[:6]}"
@@ -224,7 +230,7 @@ async def create_user(payload: UserCreate, user=Depends(require_admin)):
     return UserOut(id=doc['id'], email=doc['email'], name=doc['name'], role=doc['role'], created_at=doc['created_at'])
 
 @api_router.get("/auth/users", response_model=List[UserOut])
-async def list_users(user=Depends(require_admin)):
+async def list_users(user=Depends(require_super_admin)):
     rows = await db.users.find({}, {'_id': 0, 'password_hash': 0}).to_list(500)
     return [UserOut(**r) for r in rows]
 
@@ -504,7 +510,7 @@ async def public_theme_css():
 
 # ─────────────────────────── AI Settings & Generation ───────────────────────────
 @api_router.get("/admin/ai-settings")
-async def admin_get_ai_settings(user=Depends(require_admin)):
+async def admin_get_ai_settings(user=Depends(require_super_admin)):
     s = await db.ai_settings.find_one({'id': 'main'}, {'_id': 0})
     if s:
         # Mask API key
@@ -523,7 +529,7 @@ class AiSettingsIn(BaseModel):
     default_size: str = "1024x1024"
 
 @api_router.put("/admin/ai-settings")
-async def admin_update_ai_settings(payload: AiSettingsIn, user=Depends(require_admin)):
+async def admin_update_ai_settings(payload: AiSettingsIn, user=Depends(require_super_admin)):
     data = payload.model_dump(exclude_none=True)
     data['id'] = 'main'
     data['updated_at'] = now_iso()
@@ -660,6 +666,7 @@ class AiGenerateIn(BaseModel):
     quality: Literal["low", "medium", "high"] = "high"
     save_to_media: bool = True
     title: Optional[str] = None
+    reference_images: Optional[List[str]] = None  # data URLs or /api/public/media/... paths
 
 ASPECT_TO_SIZE = {
     "1:1": "1024x1024",
@@ -685,26 +692,71 @@ async def admin_ai_generate(payload: AiGenerateIn, user=Depends(require_admin)):
     size = ASPECT_TO_SIZE[payload.aspect_ratio]
     try:
         oclient = AsyncOpenAI(api_key=api_key)
-        # Try gpt-image-2 first, fallback to gpt-image-1 if not available
-        try:
-            resp = await oclient.images.generate(
-                model="gpt-image-2",
-                prompt=payload.prompt,
-                size=size,
-                quality=payload.quality,
-                n=1,
-            )
-            model_used = "gpt-image-2"
-        except Exception as e1:
-            logging.warning(f"gpt-image-2 failed, trying gpt-image-1: {e1}")
-            resp = await oclient.images.generate(
-                model="gpt-image-1",
-                prompt=payload.prompt,
-                size=size,
-                quality=payload.quality,
-                n=1,
-            )
-            model_used = "gpt-image-1"
+        # If reference images provided, use images.edit (supports up to 3 refs)
+        ref_bytes: List[bytes] = []
+        for ref in (payload.reference_images or [])[:3]:
+            try:
+                if ref.startswith('data:image'):
+                    _, b64part = ref.split(',', 1)
+                    ref_bytes.append(base64.b64decode(b64part))
+                elif ref.startswith('/api/public/media/'):
+                    storage_path = ref.replace('/api/public/media/', '', 1)
+                    data, _ = await object_storage.get_bytes(storage_path)
+                    ref_bytes.append(data)
+                elif ref.startswith('http'):
+                    async with httpx.AsyncClient(timeout=30) as hc:
+                        r = await hc.get(ref)
+                        r.raise_for_status()
+                        ref_bytes.append(r.content)
+            except Exception as re:
+                logging.warning(f"Skipping bad reference image: {re}")
+
+        if ref_bytes:
+            import io
+            files = []
+            for idx, data in enumerate(ref_bytes):
+                bio = io.BytesIO(data); bio.name = f"ref_{idx}.png"
+                files.append(bio)
+            try:
+                resp = await oclient.images.edit(
+                    model="gpt-image-2",
+                    image=files if len(files) > 1 else files[0],
+                    prompt=payload.prompt, size=size, quality=payload.quality, n=1,
+                )
+                model_used = "gpt-image-2"
+            except Exception as e1:
+                logging.warning(f"gpt-image-2 edit failed, fallback to gpt-image-1: {e1}")
+                files = []
+                for idx, data in enumerate(ref_bytes):
+                    bio = io.BytesIO(data); bio.name = f"ref_{idx}.png"
+                    files.append(bio)
+                resp = await oclient.images.edit(
+                    model="gpt-image-1",
+                    image=files if len(files) > 1 else files[0],
+                    prompt=payload.prompt, size=size, quality=payload.quality, n=1,
+                )
+                model_used = "gpt-image-1"
+        else:
+            # Try gpt-image-2 first, fallback to gpt-image-1 if not available
+            try:
+                resp = await oclient.images.generate(
+                    model="gpt-image-2",
+                    prompt=payload.prompt,
+                    size=size,
+                    quality=payload.quality,
+                    n=1,
+                )
+                model_used = "gpt-image-2"
+            except Exception as e1:
+                logging.warning(f"gpt-image-2 failed, trying gpt-image-1: {e1}")
+                resp = await oclient.images.generate(
+                    model="gpt-image-1",
+                    prompt=payload.prompt,
+                    size=size,
+                    quality=payload.quality,
+                    n=1,
+                )
+                model_used = "gpt-image-1"
 
         b64 = resp.data[0].b64_json
         if not b64:
@@ -1552,7 +1604,7 @@ async def admin_get_subscription(user=Depends(require_admin)):
     return doc
 
 @api_router.put("/admin/subscription/plan")
-async def admin_set_subscription_plan(payload: SubscriptionPlanIn, user=Depends(require_admin)):
+async def admin_set_subscription_plan(payload: SubscriptionPlanIn, user=Depends(require_super_admin)):
     if user.get('role') != 'super_admin':
         raise HTTPException(403, "Sadece süper admin paketi değiştirebilir")
     plan = PLAN_LIMITS[payload.plan_name]
@@ -1577,7 +1629,7 @@ async def admin_set_subscription_plan(payload: SubscriptionPlanIn, user=Depends(
     return doc
 
 @api_router.post("/admin/subscription/credit-adjust")
-async def admin_credit_adjust(payload: CreditAdjustIn, user=Depends(require_admin)):
+async def admin_credit_adjust(payload: CreditAdjustIn, user=Depends(require_super_admin)):
     if user.get('role') != 'super_admin':
         raise HTTPException(403, "Sadece süper admin kredi ayarlayabilir")
     doc = await _ensure_subscription_doc()

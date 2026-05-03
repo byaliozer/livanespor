@@ -167,9 +167,16 @@ const AiStudio = () => {
         }).catch((e) => toast.error("Veri yüklenemedi: " + e.message));
     }, []);
 
-    // Poll active jobs
+    // Poll active jobs — also keep polling briefly after success to pick up async caption
     useEffect(() => {
-        const needsPoll = jobs.some((j) => j.status === "pending" || j.status === "processing");
+        const nowMs = Date.now();
+        // Job considered "recent" if finished within last 2 minutes
+        const recentSuccessMissingCaption = jobs.some((j) => {
+            if (j.status !== "success" || j.social_caption) return false;
+            const fin = j.finished_at ? Date.parse(j.finished_at) : 0;
+            return fin && (nowMs - fin) < 120000;
+        });
+        const needsPoll = jobs.some((j) => j.status === "pending" || j.status === "processing") || recentSuccessMissingCaption;
         if (!needsPoll) {
             if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
             return;
@@ -239,6 +246,21 @@ const AiStudio = () => {
     };
 
     const refreshJobs = async () => setJobs(await adminApi.aiJobs(30));
+
+    // When jobs update via polling, sync lightbox items so newly-arrived captions show up live
+    useEffect(() => {
+        if (!lbOpen || lbItems.length === 0) return;
+        setLbItems((prev) => prev.map((item) => {
+            const j = jobs.find((x) => x.public_url && mediaAbsUrl(x.public_url) === item.url);
+            if (!j) return item;
+            const social = j.social_caption;
+            if (social && !item.social_caption) {
+                return { ...item, social_caption: social, expecting_caption: false };
+            }
+            return item;
+        }));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [jobs, lbOpen]);
 
     const openJobLightbox = (job) => {
         const successJobs = jobs.filter((j) => j.status === "success" && j.public_url);
@@ -333,11 +355,10 @@ const AiStudio = () => {
             <div>
                 <div className="overline">AI Medya Stüdyosu</div>
                 <h1 className="font-display text-5xl md:text-6xl uppercase mt-1 inline-flex items-center gap-3">
-                    <Wand2 className="w-8 h-8 text-liv-yellow" /> Şablon Üretici
+                    <Wand2 className="w-8 h-8 text-liv-yellow" /> AI Stüdyo
                 </h1>
                 <p className="text-sm text-neutral-400 mt-2">
-                    9 hazır şablon · Design DNA · Varyasyon (1 veya 3) · Referans görsel destekli gpt-image-2.
-                    Her varyasyon 1 kredi.
+                    DR AI Image 2 — Her görsel 1 kredi harcar.
                 </p>
             </div>
 
@@ -659,7 +680,7 @@ const AiStudio = () => {
                                             {j.refunded && <div className="text-[10px] text-green-400 mt-1">✓ 1 kredi iade edildi</div>}
                                         </div>
                                     )}
-                                    {j.status === "processing" && <div className="text-xs text-neutral-400 mt-1">gpt-image-2 çalışıyor (~20-60sn)…</div>}
+                                    {j.status === "processing" && <div className="text-xs text-neutral-400 mt-1">DR AI Image 2 çalışıyor (~20-60sn)…</div>}
                                     {j.status === "pending" && <div className="text-xs text-neutral-500 mt-1">Kuyrukta</div>}
                                 </div>
                             ))}
