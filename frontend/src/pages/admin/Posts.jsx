@@ -11,7 +11,7 @@ const fields = [
     { name: "status", label: "Durum", type: "select", options: [
         { value: "draft", label: "Taslak" }, { value: "published", label: "Yayında" }, { value: "scheduled", label: "Planlandı" },
     ]},
-    { name: "cover_image", label: "Kapak Görseli URL", fullWidth: true },
+    { name: "cover_image", label: "Kapak Görseli", type: "image", purpose: "post_cover", fullWidth: true },
     { name: "excerpt", label: "Özet", type: "textarea", fullWidth: true, rows: 2 },
     { name: "content", label: "İçerik (HTML destekler)", type: "textarea", fullWidth: true, rows: 10 },
     { name: "tags", label: "Etiketler (virgülle ayır)", placeholder: "livanespor, akademi" },
@@ -19,7 +19,7 @@ const fields = [
     { name: "published_at", label: "Yayın Tarihi", type: "datetime-local" },
     { name: "seo_title", label: "SEO Başlık", fullWidth: true },
     { name: "seo_description", label: "SEO Açıklama", type: "textarea", fullWidth: true, rows: 2 },
-    { name: "og_image", label: "OG Görsel URL", fullWidth: true },
+    { name: "og_image", label: "OG Görsel (Sosyal Medya Paylaşımı)", type: "image", purpose: "post_og", fullWidth: true },
 ];
 const columns = [
     { key: "cover_image", label: "" }, { key: "title", label: "Başlık" },

@@ -258,3 +258,4 @@ const CrudPage = ({
 };
 
 export default CrudPage;
+export { ImageField, absUrl };

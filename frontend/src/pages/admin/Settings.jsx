@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { adminApi } from "@/lib/api";
 import { Save } from "lucide-react";
 import { toast } from "sonner";
+import { ImageField } from "@/components/admin/CrudPage";
 
 const THEMES = [
     { value: "dark", label: "Koyu (Dark)" },
@@ -59,8 +60,14 @@ const Settings = () => {
                     <div><label className="liv-label">Kısa Ad (ör. LIV)</label><input value={s.short_name || ""} onChange={(e) => update("short_name", e.target.value)} className="liv-input" data-testid="settings-short-name" placeholder="LIV" /></div>
                     <div><label className="liv-label">Sezon</label><input value={s.season || ""} onChange={(e) => update("season", e.target.value)} className="liv-input" data-testid="settings-season" /></div>
                     <div className="md:col-span-2"><label className="liv-label">Site Açıklaması</label><textarea rows={2} value={s.site_description || ""} onChange={(e) => update("site_description", e.target.value)} className="liv-input" data-testid="settings-site-description" /></div>
-                    <div><label className="liv-label">Logo URL</label><input value={s.logo_url || ""} onChange={(e) => update("logo_url", e.target.value)} className="liv-input" data-testid="settings-logo-url" /></div>
-                    <div><label className="liv-label">Favicon URL</label><input value={s.favicon_url || ""} onChange={(e) => update("favicon_url", e.target.value)} className="liv-input" /></div>
+                    <div className="md:col-span-2">
+                        <label className="liv-label">Logo</label>
+                        <ImageField value={s.logo_url} onChange={(v) => update("logo_url", v)} testid="settings-logo-url" purpose="logo" />
+                    </div>
+                    <div className="md:col-span-2">
+                        <label className="liv-label">Favicon</label>
+                        <ImageField value={s.favicon_url} onChange={(v) => update("favicon_url", v)} testid="settings-favicon-url" purpose="favicon" />
+                    </div>
                 </div>
             </div>
 

@@ -2,7 +2,7 @@ import CrudPage from "@/components/admin/CrudPage";
 
 const fields = [
     { name: "name", label: "Firma Adı", required: true },
-    { name: "logo_url", label: "Logo URL", fullWidth: true },
+    { name: "logo_url", label: "Logo", type: "image", purpose: "sponsor", fullWidth: true },
     { name: "level", label: "Sponsorluk Seviyesi", type: "select", options: [
         { value: "main", label: "Ana Sponsor" }, { value: "forma", label: "Forma Sponsoru" },
         { value: "jersey", label: "Forma Sponsoru (Yaş)" }, { value: "supporter", label: "Destekçi" },

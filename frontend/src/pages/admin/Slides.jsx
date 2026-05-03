@@ -4,7 +4,7 @@ const fields = [
     { name: "title", label: "Başlık", required: true, fullWidth: true },
     { name: "subtitle", label: "Alt Başlık", fullWidth: true },
     { name: "description", label: "Açıklama", type: "textarea", fullWidth: true },
-    { name: "image_url", label: "Görsel URL", fullWidth: true },
+    { name: "image_url", label: "Görsel", type: "image", purpose: "slide", fullWidth: true },
     { name: "cta_primary_label", label: "Buton 1 Metin" },
     { name: "cta_primary_link", label: "Buton 1 Link" },
     { name: "cta_secondary_label", label: "Buton 2 Metin" },
