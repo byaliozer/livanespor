@@ -330,3 +330,32 @@ GoDaddy livanespor.com → Emergent deployment domain bağlama:
 - Lint shows only E701/E702 cosmetic style nits (semicolon/colon-on-same-line) — left as-is to minimize churn.
 
 
+
+
+## 5j. 2026-05-03 — Dashboard v1.7.0 + Backend Refactor v1.7.1
+
+### Dashboard Features (v1.7.0) — VERIFIED ✓
+- **Sezon Form Grafiği** (Son 10 Maç) — bar chart with our goals vs opponent goals, color-coded by W/D/L
+- **En İyi Performans** — Gol Kralı (top 5 scorers) + Asist Kralı (top 5 assist providers)
+- Backend: `/api/admin/dashboard/stats` returns `season_form`, `season_form_summary`, `top_performers`
+- Frontend: `Dashboard.jsx` data-testids `dashboard-form-chart`, `dashboard-top-performers`
+- Status: Verified via screenshot + curl. Live data renders (3G·4B·3M·29-23, 5 scorers).
+
+### Backend Refactor (v1.7.1) — Server.py split
+- **Goal:** Reduce server.py size to prevent hot-reload truncation issues during search_replace
+- **Result:** server.py: 2213 → 1700 lines (-23%, -513 lines)
+- **New modules:**
+  - `/app/backend/seeds.py` (313 lines) — `seed_admin()` + `seed_content()` extracted as stateless functions taking `db` as arg
+  - `/app/backend/dashboard_routes.py` (249 lines) — `register_dashboard_routes()` factory exposing `/admin/dashboard/birthdays` and `/admin/dashboard/stats` with all helper logic (`_parse_birth`, `_upcoming_birthdays`)
+- **Wiring in server.py:**
+  - `from seeds import seed_admin as _seed_admin, seed_content as _seed_content` — used in `startup_event`
+  - `register_dashboard_routes(api_router, db, require_admin, _ensure_subscription_doc)` called BEFORE `app.include_router(api_router)`
+  - `force_reseed` endpoint inline-imports `seeds.seed_admin` for backward compatibility
+- **Tests:** 74/74 pytest passing, all dashboard/auth/CRUD endpoints curl-verified
+
+### Future refactor candidates (P2)
+- AI Studio routes (~500 lines: `/admin/ai/templates`, `generate-template`, `_run_ai_job`, gallery, design-options) → `ai_routes.py`
+- Mackolik routes (~120 lines) → `mackolik_routes.py`
+- Subscription/Credit routes (~140 lines) → `subscription_routes.py`
+- Media upload/archive routes (~80 lines) → `media_routes.py`
+- After all extractions, server.py would reduce to ~800 lines (auth + public + CRUD factory + AI generate + wiring)
