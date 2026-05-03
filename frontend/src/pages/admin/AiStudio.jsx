@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Lightbox } from "@/components/admin/Lightbox";
+import { FieldHelpPanel } from "@/components/admin/FieldHelpPanel";
 
 // URL helper for public media proxy
 const mediaAbsUrl = (pathOrDataUrl) => {
@@ -402,6 +403,8 @@ const AiStudio = () => {
                                 <p className="text-xs text-neutral-400 mt-1">{active.description}</p>
                             </div>
 
+                            <FieldHelpPanel templateKey={active.key} />
+
                             {/* Dynamic fields per template */}
                             {needsPlayer && (
                                 <div>
@@ -437,11 +440,15 @@ const AiStudio = () => {
                                         <select className="liv-input" value={ctx._match_id || ""} onChange={(e) => {
                                             const m = matches.find((mm) => mm.id === e.target.value);
                                             if (m) {
+                                                const TR_DAYS = ["PAZAR","PAZARTESİ","SALI","ÇARŞAMBA","PERŞEMBE","CUMA","CUMARTESİ"];
+                                                const dt = m.match_date ? new Date(m.match_date) : null;
+                                                const dayStr = dt && !isNaN(dt) ? TR_DAYS[dt.getDay()] : "";
                                                 setCtx((c) => ({
                                                     ...c, _match_id: m.id,
                                                     home_name: m.home_team, away_name: m.away_team,
                                                     date_str: (m.match_date || "").slice(0, 10),
                                                     time_str: (m.match_date || "").slice(11, 16),
+                                                    day_str: dayStr,
                                                     stadium: m.venue, league_display: m.competition,
                                                     home_score: m.home_score, away_score: m.away_score,
                                                 }));
@@ -456,6 +463,9 @@ const AiStudio = () => {
                                         <div><label className="liv-label">Deplasman</label><input className="liv-input" value={ctx.away_name || ""} onChange={(e) => setCtxField("away_name", e.target.value)} /></div>
                                         <div><label className="liv-label">Tarih</label><input className="liv-input" value={ctx.date_str || ""} placeholder="02.06.2026" onChange={(e) => setCtxField("date_str", e.target.value)} /></div>
                                         <div><label className="liv-label">Saat</label><input className="liv-input" value={ctx.time_str || ""} placeholder="19:00" onChange={(e) => setCtxField("time_str", e.target.value)} /></div>
+                                        {active.key === "fan_invite" && (
+                                            <div className="col-span-2"><label className="liv-label">Gün (Otomatik veya Elle)</label><input className="liv-input" value={ctx.day_str || ""} placeholder="PAZAR" onChange={(e) => setCtxField("day_str", e.target.value.toUpperCase())} data-testid="field-day-str" /></div>
+                                        )}
                                         <div className="col-span-2"><label className="liv-label">Stat</label><input className="liv-input" value={ctx.stadium || ""} onChange={(e) => setCtxField("stadium", e.target.value)} /></div>
                                         <div className="col-span-2"><label className="liv-label">Lig / Maç Tipi</label><input className="liv-input" value={ctx.league_display || ""} placeholder="BAL Ligi 4. Grup" onChange={(e) => setCtxField("league_display", e.target.value)} /></div>
                                         {active.required_inputs.includes("home_score") && (<>
@@ -479,10 +489,7 @@ const AiStudio = () => {
                             )}
 
                             {active.key === "fan_invite" && (
-                                <>
-                                    <div><label className="liv-label">Maç Metni</label><input className="liv-input" value={ctx.match_text || ""} placeholder="Pazar 19:00 Yolçatı" onChange={(e) => setCtxField("match_text", e.target.value)} data-testid="field-match-text" /></div>
-                                    <div><label className="liv-label">Taraftar Mesajı</label><input className="liv-input" value={ctx.message || ""} placeholder="Tribünlere bekliyoruz!" onChange={(e) => setCtxField("message", e.target.value)} data-testid="field-message" /></div>
-                                </>
+                                <div><label className="liv-label">Vurgu Mesajı (opsiyonel · 1-2 satır)</label><input className="liv-input" value={ctx.message || ""} placeholder="Sarı-Siyah Aşk Bizim!" onChange={(e) => setCtxField("message", e.target.value)} data-testid="field-message" /></div>
                             )}
 
                             {active.key === "motm" && (

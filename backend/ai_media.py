@@ -192,6 +192,8 @@ def _typography_rules(no_extra_logos: bool = True) -> list[str]:
     ]
     if no_extra_logos:
         rules.append("• Do not add any extra logos or brand marks beyond the given references.")
+    # Append global strict rules in EVERY template (prevents AI hallucinations club-wide)
+    rules += _strict_global_rules()
     return rules
 
 
@@ -554,11 +556,32 @@ def build_new_transfer(ctx: dict, s: dict, design: Optional[dict] = None) -> Tup
     return "\n".join(parts), f"Yeni Transfer — {name or '?'}"
 
 
+def _strict_global_rules() -> list[str]:
+    """Critical negative rules to inject into EVERY template — prevents AI hallucinations."""
+    return [
+        "",
+        "GLOBAL STRICT RULES (MUST FOLLOW):",
+        "• Render text EXACTLY as provided — no rephrasing, no abbreviation, no translation, no spelling changes.",
+        "• NEVER invent club names from stadium / city / region words. Stadium name appears ONLY in the dedicated info strip.",
+        "• NEVER write team names on scarves, banners, flares, flags or fan apparel. Scarves stay BLANK or use only club COLOR PATTERNS (stripes).",
+        "• ALL crests/logos come EXCLUSIVELY from provided reference images — DO NOT generate or invent any logos, mascots, eagles, lions, shields.",
+        "• If a field (date/time/stadium/league) is empty in the input, OMIT it entirely — DO NOT make up placeholder content.",
+        "• Footer must contain ONLY the website + instagram strings provided — no additional brand marks.",
+    ]
+
+
 def build_fan_invite(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple[str, str]:
-    match_text = ctx.get("match_text", "")
+    home = ctx.get("home_name", "HOME")
+    away = ctx.get("away_name", "AWAY")
+    date = ctx.get("date_str", "")
+    time_ = ctx.get("time_str", "")
+    day = ctx.get("day_str", "")  # PAZAR / PAZARTESİ etc.
+    stadium = ctx.get("stadium", "")
+    league = ctx.get("league_display", "")
     message = ctx.get("message", "")
     theme = ctx.get("theme", "enerjik")
-    primary = s.get("primary_color") or "#f5dc4c"; secondary = s.get("secondary_color") or "#ffffff"
+    primary = s.get("primary_color") or "#f5dc4c"
+    secondary = s.get("secondary_color") or "#ffffff"
     bg = s.get("bg_color") or "#0b0b0b"
     website = s.get("website") or s.get("site_url")
     instagram = s.get("instagram_username") or (s.get("social") or {}).get("instagram")
@@ -566,18 +589,50 @@ def build_fan_invite(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple
     parts = [
         "Create a premium 1:1 square FAN INVITATION football poster (supporter mobilization).",
         *_style_header(theme, primary, secondary, bg),
-        "Packed stadium tribune scene with fans holding scarves and flares in club colors.",
+        "Packed stadium tribune scene with fans holding BLANK club-color scarves and flares — no text on scarves.",
     ]
     parts += _design_block(design)
     parts += [
-        "", "CONTENT:",
-        "• TOP CENTER — large uppercase heading: \"TRİBÜNLERE DAVETLİSİN\" in accent color.",
+        "",
+        "LAYOUT (follow DESIGN DIRECTION above; content placement rules below):",
+        "• TOP — giant bold Turkish uppercase heading: \"TRİBÜNLERE DAVETLİSİN\" in accent color.",
     ]
-    if match_text: parts.append(f"• Subtitle: \"{match_text.upper()}\" (smaller white).")
-    if message: parts.append(f"• Supporter message: \"{message}\" (3 lines max).")
+    if league:
+        parts.append(f"• Above heading or as small overline: \"{league}\".")
+    # Match info strip — single uppercase line under heading
+    info_bits = []
+    if day: info_bits.append(day.upper())
+    if time_: info_bits.append(time_)
+    if stadium: info_bits.append(stadium.upper())
+    if info_bits:
+        parts.append(f"• Under heading — single uppercase white strip: \"{' · '.join(info_bits)}\".")
+    if date and not day:
+        parts.append(f"• Under heading — date strip: \"{date}\".")
+    parts += [
+        "",
+        "• MIDDLE — TWO crests side by side, equal size, with a small dot/divider between them:",
+        "  - LEFT crest = FIRST reference image. Preserve shape, colors, text and details EXACTLY.",
+        "  - RIGHT crest = SECOND reference image. Preserve shape, colors, text and details EXACTLY.",
+        f"  - LEFT crest sits above team name: \"{home.upper()}\" (small uppercase white).",
+        f"  - RIGHT crest sits above team name: \"{away.upper()}\" (small uppercase white).",
+    ]
+    if message:
+        parts.append(f"\n• HERO QUOTE — large brush-script accent-color message under crests: \"{message}\" (1-2 lines max, do NOT exceed).")
+    parts += [
+        "",
+        "• BACKGROUND — packed tribune at night, raised fan silhouettes, smoke flares in club colors, atmospheric haze.",
+    ]
     parts += _footer_lines(website, instagram)
-    parts += _typography_rules(no_extra_logos=False)
-    return "\n".join(parts), f"Taraftar Daveti — {match_text or 'Maç'}"
+    parts += _typography_rules(no_extra_logos=True)
+    parts += _strict_global_rules()
+    parts += [
+        "",
+        "FAN_INVITE-SPECIFIC NEGATIVES:",
+        "• Scarves and flags MUST be blank (color stripes only, NO writing).",
+        "• Stadium name appears ONLY in the info strip — never on banners, never as hero text.",
+        "• Crowd faces are silhouettes — no recognizable individuals.",
+    ]
+    return "\n".join(parts), f"Taraftar Daveti — {home} vs {away}"
 
 
 # ───────────────────────── Registry ─────────────────────────
@@ -614,9 +669,9 @@ TEMPLATES: Dict[str, Dict[str, Any]] = {
                      "aspect_ratio": "4:5", "required_inputs": ["player_id"],
                      "reference_slots": ["player_photo?"],
                      "builder": build_new_transfer, "order": 8},
-    "fan_invite":   {"name": "Taraftar Daveti", "description": "Maça davet / motivasyon.",
-                     "aspect_ratio": "9:16", "required_inputs": ["match_text"],
-                     "reference_slots": [],
+    "fan_invite":   {"name": "Taraftar Daveti", "description": "Maça davet — maç seçimi + her iki takım armaası ile.",
+                     "aspect_ratio": "1:1", "required_inputs": ["home_name", "away_name"],
+                     "reference_slots": ["home_crest", "away_crest"],
                      "builder": build_fan_invite, "order": 9},
 }
 
