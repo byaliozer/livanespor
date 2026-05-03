@@ -277,6 +277,7 @@ COLLECTIONS = {
     'media': {'public': False, 'slug_field': None},
     'hero_slides': {'public': True, 'slug_field': None},
     'team_photos': {'public': False, 'slug_field': None},
+    'opponent_clubs': {'public': False, 'slug_field': 'name'},
 }
 
 async def _list(coll: str, public_only: bool = False, filters: Optional[dict] = None, sort_field: str = 'created_at', sort_dir: int = -1, limit: int = 500):
@@ -793,15 +794,14 @@ async def _current_media_cap() -> int:
         return 500
 
 async def _resolve_template_ctx(template_key: str, payload: dict) -> dict:
-    """Expand ctx with DB lookups: player_id → full player doc; match_id → match doc."""
+    """Expand ctx with DB lookups: player_id → full player doc; match_id → match doc.
+    Auto-derives day_str from any provided date_str/match_date if missing."""
     ctx = dict(payload)
-    # Player lookup
     pid = ctx.pop('player_id', None)
     if pid:
         p = await db.players.find_one({'$or': [{'id': pid}, {'slug': pid}]}, {'_id': 0})
         if p:
             ctx['player'] = p
-    # Match lookup
     mid = ctx.pop('match_id', None)
     if mid:
         m = await db.matches.find_one({'id': mid}, {'_id': 0})
@@ -814,18 +814,62 @@ async def _resolve_template_ctx(template_key: str, payload: dict) -> dict:
             ctx.setdefault('venue', m.get('venue'))
             ctx.setdefault('competition', m.get('competition'))
             ctx.setdefault('opponent', m.get('opponent'))
-    # Starting XI: list of player_ids → players
     player_ids = ctx.pop('player_ids', None)
     if player_ids:
         rows = await db.players.find({'id': {'$in': player_ids}}, {'_id': 0}).to_list(20)
-        # Preserve input order
         ordered = []
         for pid_ in player_ids:
             found = next((r for r in rows if r.get('id') == pid_), None)
             if found:
                 ordered.append(found)
         ctx['players'] = ordered
+    # Auto-derive Turkish day name from date_str or match_date if user didn't provide it
+    if not ctx.get('day_str'):
+        ctx['day_str'] = ai_media._format_day_str(ctx.get('date_str') or ctx.get('match_date') or '')
     return ctx
+
+
+async def _auto_fill_match_crests(ctx: Dict[str, Any], reference_images: List[str]) -> List[str]:
+    """If template uses home_crest/away_crest references and the user didn't upload both,
+    auto-resolve from site_settings.logo_url (own club) and opponent_clubs collection.
+    User-uploaded refs ALWAYS take priority — auto-fill only fills empty slots."""
+    if len(reference_images) >= 2:
+        return reference_images  # user provided both — respect override
+    home = (ctx.get('home_name') or '').strip()
+    away = (ctx.get('away_name') or '').strip()
+    if not (home and away):
+        return reference_images
+    site = await db.site_settings.find_one({'id': 'main'}, {'_id': 0}) or {}
+    own_name = (site.get('site_title') or site.get('short_name') or 'Livanespor').strip().lower()
+    own_logo = site.get('logo_url')
+
+    async def _crest_for(name: str) -> Optional[str]:
+        nl = name.strip().lower()
+        if nl == own_name or own_name in nl or nl in own_name:
+            return own_logo
+        opps = await db.opponent_clubs.find({}, {'_id': 0}).to_list(500)
+        # Exact (case-insensitive) match first
+        for o in opps:
+            on = (o.get('name') or '').strip().lower()
+            if on == nl:
+                return o.get('crest_url')
+        # Fuzzy contains match
+        for o in opps:
+            on = (o.get('name') or '').strip().lower()
+            if on and (on in nl or nl in on):
+                return o.get('crest_url')
+        return None
+
+    home_crest = await _crest_for(home)
+    away_crest = await _crest_for(away)
+    auto = []
+    if home_crest: auto.append(home_crest)
+    if away_crest: auto.append(away_crest)
+    # Combine: user refs first (if any), then auto fills only what's missing
+    out = list(reference_images)
+    while len(out) < 2 and auto:
+        out.append(auto.pop(0))
+    return out
 
 @api_router.get("/admin/ai/templates")
 async def admin_ai_templates(user=Depends(require_admin)):
@@ -902,6 +946,11 @@ async def _run_ai_job(job_id: str):
 
         # Reference image handling: fetch bytes from data urls or /api/public/media/... paths
         ref_images_raw: List[str] = cur.get('reference_images') or []
+        # Auto-fill missing home/away crests from site_settings + opponent_clubs (only if user gave <2 refs)
+        tpl_for_refs = ai_media.TEMPLATES.get(cur['template_key']) or {}
+        ref_slots = tpl_for_refs.get('reference_slots') or []
+        if 'home_crest' in ref_slots and 'away_crest' in ref_slots:
+            ref_images_raw = await _auto_fill_match_crests(ctx, ref_images_raw)
         ref_bytes: List[bytes] = []
         for ref in ref_images_raw:
             try:

@@ -463,7 +463,7 @@ const AiStudio = () => {
                                         <div><label className="liv-label">Deplasman</label><input className="liv-input" value={ctx.away_name || ""} onChange={(e) => setCtxField("away_name", e.target.value)} /></div>
                                         <div><label className="liv-label">Tarih</label><input className="liv-input" value={ctx.date_str || ""} placeholder="02.06.2026" onChange={(e) => setCtxField("date_str", e.target.value)} /></div>
                                         <div><label className="liv-label">Saat</label><input className="liv-input" value={ctx.time_str || ""} placeholder="19:00" onChange={(e) => setCtxField("time_str", e.target.value)} /></div>
-                                        {active.key === "fan_invite" && (
+                                        {(active.key === "fan_invite" || active.key === "lineup" || active.key === "match_week" || active.key === "match_day" || active.key === "full_time") && (
                                             <div className="col-span-2"><label className="liv-label">Gün (Otomatik veya Elle)</label><input className="liv-input" value={ctx.day_str || ""} placeholder="PAZAR" onChange={(e) => setCtxField("day_str", e.target.value.toUpperCase())} data-testid="field-day-str" /></div>
                                         )}
                                         <div className="col-span-2"><label className="liv-label">Stat</label><input className="liv-input" value={ctx.stadium || ""} onChange={(e) => setCtxField("stadium", e.target.value)} /></div>

@@ -34,6 +34,7 @@ import AdminStaff from "@/pages/admin/Staff";
 import AdminMatches from "@/pages/admin/Matches";
 import AdminStandings from "@/pages/admin/Standings";
 import AdminSponsors from "@/pages/admin/Sponsors";
+import AdminOpponents from "@/pages/admin/Opponents";
 import AdminPosts from "@/pages/admin/Posts";
 import AdminAcademyGroups from "@/pages/admin/AcademyGroups";
 import AdminAcademySessions from "@/pages/admin/AcademySessions";
@@ -85,6 +86,7 @@ function App() {
                     <Route path="/admin/matches" element={<AdminLayout><AdminMatches /></AdminLayout>} />
                     <Route path="/admin/standings" element={<AdminLayout><AdminStandings /></AdminLayout>} />
                     <Route path="/admin/sponsors" element={<AdminLayout><AdminSponsors /></AdminLayout>} />
+                    <Route path="/admin/opponents" element={<AdminLayout><AdminOpponents /></AdminLayout>} />
                     <Route path="/admin/posts" element={<AdminLayout><AdminPosts /></AdminLayout>} />
                     <Route path="/admin/academy-groups" element={<AdminLayout><AdminAcademyGroups /></AdminLayout>} />
                     <Route path="/admin/academy-sessions" element={<AdminLayout><AdminAcademySessions /></AdminLayout>} />

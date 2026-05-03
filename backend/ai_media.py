@@ -363,29 +363,62 @@ def build_full_time(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple[
     return "\n".join(parts), f"Maç Sonu — {home} {hs}-{as_} {away}"
 
 
+def _format_day_str(date_str: str) -> str:
+    """Convert YYYY-MM-DD or DD.MM.YYYY → Turkish day name uppercase (PAZAR, PAZARTESİ ...)."""
+    if not date_str:
+        return ""
+    import datetime as _dt
+    TR_DAYS = ["PAZARTESİ","SALI","ÇARŞAMBA","PERŞEMBE","CUMA","CUMARTESİ","PAZAR"]
+    s = str(date_str).strip()
+    for fmt in ("%Y-%m-%d","%d.%m.%Y","%d/%m/%Y","%Y/%m/%d"):
+        try:
+            return TR_DAYS[_dt.datetime.strptime(s[:10], fmt).weekday()]
+        except Exception:
+            continue
+    return ""
+
+
 def build_lineup(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple[str, str]:
     formation = ctx.get("formation", "4-3-3")
     players: List[Dict[str, Any]] = ctx.get("players", [])[:11]
     coach = ctx.get("coach", "")
-    home = ctx.get("home_name", ""); away = ctx.get("away_name", "")
+    home = ctx.get("home_name", "")
+    away = ctx.get("away_name", "")
+    date = ctx.get("date_str", "")
+    time_ = ctx.get("time_str", "")
+    day = ctx.get("day_str", "") or _format_day_str(date)
+    stadium = ctx.get("stadium", "")
+    league = ctx.get("league_display", "")
     theme = ctx.get("theme", "enerjik")
-    primary = s.get("primary_color") or "#f5dc4c"; secondary = s.get("secondary_color") or "#ffffff"
+    primary = s.get("primary_color") or "#f5dc4c"
+    secondary = s.get("secondary_color") or "#ffffff"
     bg = s.get("bg_color") or "#0b0b0b"
     website = s.get("website") or s.get("site_url")
     instagram = s.get("instagram_username") or (s.get("social") or {}).get("instagram")
 
-    parts = ["Create a premium 1:1 square STARTING XI tactics board poster.",
-             *_style_header(theme, primary, secondary, bg),
-             "Football pitch viewed top-down, clean turf lines, subtle stadium bokeh around edges."]
+    parts = [
+        "Create a premium 1:1 square STARTING XI tactics board poster.",
+        *_style_header(theme, primary, secondary, bg),
+        "Football pitch viewed top-down, clean turf lines, subtle stadium bokeh around edges.",
+    ]
     parts += _design_block(design)
     parts += [
+        "",
         "LAYOUT:",
         "• TOP CENTER — giant bold Turkish heading: \"İLK 11\" in accent color.",
     ]
+    if league:
+        parts.append(f"• Above heading as small overline: \"{league}\".")
     if home and away:
         parts.append(f"• Subtitle: \"{home.upper()} vs {away.upper()}\".")
+    # Two crests as compact corner badges (don't compete with pitch)
     parts += [
-        f"• Formation badge: \"{formation}\" in small accent pill.",
+        "",
+        "• TOP-LEFT corner — small circular crest badge = FIRST reference image (preserve EXACTLY).",
+        "• TOP-RIGHT corner — small circular crest badge = SECOND reference image (preserve EXACTLY).",
+    ]
+    parts += [
+        f"• Formation badge under heading: \"{formation}\" in small accent pill.",
         "",
         "• MIDDLE — vertical pitch graphic. 11 player slots per formation lines (GK top, defence below, midfield, forwards).",
         "",
@@ -402,6 +435,14 @@ def build_lineup(ctx: dict, s: dict, design: Optional[dict] = None) -> Tuple[str
     ]
     if coach:
         parts.append(f"\n• BELOW PITCH — \"TEKNİK DİREKTÖR: {coach.upper()}\" in accent color.")
+    # Match info strip at very bottom
+    info_bits = []
+    if day: info_bits.append(day)
+    if date: info_bits.append(date)
+    if time_: info_bits.append(time_)
+    if stadium: info_bits.append(stadium.upper())
+    if info_bits:
+        parts.append(f"\n• BOTTOM info strip — single thin uppercase line: \"{' · '.join(info_bits)}\".")
     parts += _footer_lines(website, instagram)
     parts += _typography_rules()
     parts.append("• Do not draw real faces — only jersey/number tokens per slot.")
@@ -645,9 +686,9 @@ TEMPLATES: Dict[str, Dict[str, Any]] = {
                      "aspect_ratio": "1:1", "required_inputs": ["home_name", "away_name"],
                      "reference_slots": ["home_crest", "away_crest", "team_photo?"],
                      "builder": build_match_day, "order": 2},
-    "lineup":       {"name": "İlk 11",          "description": "Kadro dizilişi taktik tahtası.",
-                     "aspect_ratio": "1:1", "required_inputs": ["players", "formation"],
-                     "reference_slots": ["club_crest?"],
+    "lineup":       {"name": "İlk 11",          "description": "Kadro dizilişi — maç + her iki takım armaası ile.",
+                     "aspect_ratio": "1:1", "required_inputs": ["players", "formation", "home_name", "away_name"],
+                     "reference_slots": ["home_crest", "away_crest"],
                      "builder": build_lineup, "order": 3},
     "full_time":    {"name": "Maç Sonucu",      "description": "Maç sonu skor + opsiyonel gol atanlar.",
                      "aspect_ratio": "1:1", "required_inputs": ["home_name", "away_name", "home_score", "away_score"],

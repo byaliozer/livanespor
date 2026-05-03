@@ -8,5 +8,5 @@
 // Bu numara admin panelin alt köşesinde ve login ekranında görünür.
 // livanespor.org'da bu numara değişmişse → deploy başarılı demektir.
 
-export const APP_VERSION = "1.3.0";
+export const APP_VERSION = "1.4.0";
 export const BUILD_DATE = "2026-05-02";

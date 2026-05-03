@@ -20,6 +20,7 @@ const NAV = [
     { to: "/admin/standings", label: "Puan Durumu", icon: Trophy, group: "Kulüp" },
     { to: "/admin/mackolik", label: "Mackolik Sync", icon: RefreshCw, group: "Kulüp" },
     { to: "/admin/sponsors", label: "Sponsorlar", icon: Sparkles, group: "Kulüp" },
+    { to: "/admin/opponents", label: "Rakip Kulüpler", icon: ShieldQuestion, group: "Kulüp" },
     { to: "/admin/academy-groups", label: "Yaş Grupları", icon: GraduationCap, group: "Akademi" },
     { to: "/admin/academy-sessions", label: "Antrenman Takvimi", icon: Calendar, group: "Akademi" },
     { to: "/admin/applications", label: "Başvurular", icon: ClipboardList, group: "Akademi" },
