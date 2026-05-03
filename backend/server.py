@@ -1325,7 +1325,7 @@ async def admin_ai_gallery_seed(payload: GallerySeedIn, user=Depends(require_adm
 
 
 class GalleryImportIn(BaseModel):
-    source_url: str  # e.g. https://livanespor-pro.preview.emergentagent.com
+    source_url: str  # e.g. https://spor-panel-pro.preview.emergentagent.com
     template_keys: Optional[List[str]] = None  # if None → all 9
     per_template: int = 6  # max items per template
 

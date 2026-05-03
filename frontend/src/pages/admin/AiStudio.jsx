@@ -307,7 +307,7 @@ const AiStudio = () => {
     };
 
     const importGalleryFromPreview = async () => {
-        const PREVIEW_URL = "https://livanespor-pro.preview.emergentagent.com";
+        const PREVIEW_URL = "https://spor-panel-pro.preview.emergentagent.com";
         if (!window.confirm(
             `Önizleme ortamından (${PREVIEW_URL}) tüm 9 şablonun galeri örnekleri bu ortama kopyalanacak.\n\n` +
             `• Kredi tüketmez (görseller zaten üretilmiş, sadece kopyalanır).\n` +
