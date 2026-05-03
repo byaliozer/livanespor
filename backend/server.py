@@ -1760,6 +1760,58 @@ async def admin_dashboard_stats(user=Depends(require_admin)):
     seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     media_last_7_days = await db.media.count_documents({'created_at': {'$gte': seven_days_ago}})
 
+    # Season form: last 10 finished matches (chronological — oldest left)
+    recent_finished = await db.matches.find(
+        {'status': 'finished'}, {'_id': 0}
+    ).sort('match_date', -1).limit(10).to_list(10)
+    season_form: List[Dict[str, Any]] = []
+    for m in recent_finished:
+        home_l = (m.get('home_team') or '').strip().lower()
+        we_home = bool(own_name) and own_name in home_l
+        our = m.get('home_score') if we_home else m.get('away_score')
+        their = m.get('away_score') if we_home else m.get('home_score')
+        if our is None or their is None:
+            continue
+        season_form.append({
+            'id': m.get('id'),
+            'date': m.get('match_date'),
+            'opponent': m.get('opponent'),
+            'is_home': we_home,
+            'our_score': int(our),
+            'their_score': int(their),
+            'result': 'W' if our > their else ('D' if our == their else 'L'),
+            'competition': m.get('competition'),
+        })
+    season_form = list(reversed(season_form))  # oldest left → newest right
+    season_summary = {
+        'wins': sum(1 for x in season_form if x['result'] == 'W'),
+        'draws': sum(1 for x in season_form if x['result'] == 'D'),
+        'losses': sum(1 for x in season_form if x['result'] == 'L'),
+        'goals_for': sum(x['our_score'] for x in season_form),
+        'goals_against': sum(x['their_score'] for x in season_form),
+    }
+
+    # Top performers
+    def _stat(p, key):
+        return (p.get('stats') or {}).get(key) or 0
+    players_full = await db.players.find({'active': {'$ne': False}}, {'_id': 0}).to_list(200)
+    scorers = sorted(players_full, key=lambda p: -_stat(p, 'goals'))
+    assists_list = sorted(players_full, key=lambda p: -_stat(p, 'assists'))
+    top_performers = {
+        'scorers': [{
+            'id': p.get('id'), 'name': p.get('name'),
+            'photo_url': p.get('photo_url'), 'jersey_number': p.get('jersey_number'),
+            'position': p.get('position'),
+            'goals': _stat(p, 'goals'),
+        } for p in scorers if _stat(p, 'goals') > 0][:5],
+        'assists': [{
+            'id': p.get('id'), 'name': p.get('name'),
+            'photo_url': p.get('photo_url'), 'jersey_number': p.get('jersey_number'),
+            'position': p.get('position'),
+            'assists': _stat(p, 'assists'),
+        } for p in assists_list if _stat(p, 'assists') > 0][:5],
+    }
+
     return {
         'posts_total': posts_total,
         'posts_published': posts_pub,
@@ -1777,6 +1829,9 @@ async def admin_dashboard_stats(user=Depends(require_admin)):
         'opponents_total': opponents_total,
         'missing_opponent_logos': missing_opponent_logos,
         'media_last_7_days': media_last_7_days,
+        'season_form': season_form,
+        'season_form_summary': season_summary,
+        'top_performers': top_performers,
         'upcoming_matches_list': upcoming_list,
         'league_status': league_status,
         'mackolik': {
@@ -2155,3 +2210,4 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+

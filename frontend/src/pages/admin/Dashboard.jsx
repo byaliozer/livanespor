@@ -233,6 +233,90 @@ const AdminDashboard = () => {
                     )}
                 </div>
             </div>
+
+            {/* Sezon Form + Top Performers */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Sezon Form Grafiği — son 10 maç */}
+                <div className="lg:col-span-2 bg-liv-card border border-liv-border p-6 rounded-md" data-testid="dashboard-form-chart">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="font-display text-2xl uppercase">Sezon Form (Son 10 Maç)</h2>
+                        {stats.season_form_summary && (
+                            <div className="text-xs text-neutral-400">
+                                <span className="text-liv-yellow font-bold">{stats.season_form_summary.wins}G</span> · <span>{stats.season_form_summary.draws}B</span> · <span className="text-red-500">{stats.season_form_summary.losses}M</span> · {stats.season_form_summary.goals_for}-{stats.season_form_summary.goals_against}
+                            </div>
+                        )}
+                    </div>
+                    {(stats.season_form || []).length === 0 ? (
+                        <div className="text-sm text-neutral-500 py-4">Henüz bitmiş maç yok.</div>
+                    ) : (
+                        <div className="flex items-end gap-2 h-32">
+                            {stats.season_form.map((m) => {
+                                const maxGoals = Math.max(...stats.season_form.map((x) => x.our_score + x.their_score), 1);
+                                const ourH = (m.our_score / maxGoals) * 80 + 10;
+                                const theirH = (m.their_score / maxGoals) * 80 + 10;
+                                const colorMap = { W: "bg-liv-yellow", D: "bg-neutral-500", L: "bg-red-500" };
+                                return (
+                                    <div key={m.id} className="flex-1 flex flex-col items-center group cursor-pointer" title={`${formatDateTR(m.date)} · ${m.is_home ? "Ev" : "Dep"} vs ${m.opponent} · ${m.our_score}-${m.their_score}`}>
+                                        <div className="w-full flex items-end justify-center gap-0.5 h-24">
+                                            <div className={`w-1/2 ${colorMap[m.result]} group-hover:opacity-80 transition-opacity`} style={{ height: `${ourH}%` }} />
+                                            <div className={`w-1/2 bg-neutral-700 group-hover:opacity-80`} style={{ height: `${theirH}%` }} />
+                                        </div>
+                                        <div className={`text-[10px] font-bold mt-1 ${m.result === "W" ? "text-liv-yellow" : m.result === "D" ? "text-neutral-300" : "text-red-500"}`}>{m.our_score}-{m.their_score}</div>
+                                        <div className="text-[9px] text-neutral-500 truncate w-full text-center" title={m.opponent}>{(m.opponent || "").slice(0, 8)}</div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                    <div className="text-[10px] text-neutral-600 mt-3 flex items-center gap-3">
+                        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 bg-liv-yellow inline-block" /> Bizim gol</span>
+                        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 bg-neutral-700 inline-block" /> Rakip gol</span>
+                    </div>
+                </div>
+
+                {/* Top Performers — Gol Kralı + Asist Kralı */}
+                <div className="bg-liv-card border border-liv-border p-6 rounded-md" data-testid="dashboard-top-performers">
+                    <h2 className="font-display text-2xl uppercase mb-4">En İyi Performans</h2>
+                    <div className="mb-4">
+                        <div className="text-xs uppercase tracking-widest text-liv-yellow mb-2 flex items-center gap-1.5"><Trophy className="w-3.5 h-3.5" /> Gol Kralı</div>
+                        {(stats.top_performers?.scorers || []).length === 0 ? (
+                            <div className="text-xs text-neutral-500">Henüz veri yok. Oyuncu istatistiklerini güncelleyin.</div>
+                        ) : (
+                            <div className="space-y-1.5">
+                                {stats.top_performers.scorers.map((p, i) => (
+                                    <Link key={p.id} to="/admin/players" className="flex items-center gap-2 group">
+                                        <div className="text-xs text-neutral-500 w-4">{i + 1}.</div>
+                                        <div className="w-7 h-7 bg-liv-black border border-liv-border overflow-hidden flex-shrink-0">
+                                            {p.photo_url ? <img src={p.photo_url} alt={p.name} className="w-full h-full object-cover" /> : <UserCog className="w-3 h-3 text-neutral-600 m-auto mt-1" />}
+                                        </div>
+                                        <div className="flex-1 min-w-0 text-sm truncate group-hover:text-liv-yellow">{p.name}</div>
+                                        <div className="font-display text-lg text-liv-yellow leading-none flex-shrink-0">{p.goals}</div>
+                                    </Link>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    <div>
+                        <div className="text-xs uppercase tracking-widest text-liv-yellow mb-2 flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5" /> Asist Kralı</div>
+                        {(stats.top_performers?.assists || []).length === 0 ? (
+                            <div className="text-xs text-neutral-500">Henüz veri yok.</div>
+                        ) : (
+                            <div className="space-y-1.5">
+                                {stats.top_performers.assists.map((p, i) => (
+                                    <Link key={p.id} to="/admin/players" className="flex items-center gap-2 group">
+                                        <div className="text-xs text-neutral-500 w-4">{i + 1}.</div>
+                                        <div className="w-7 h-7 bg-liv-black border border-liv-border overflow-hidden flex-shrink-0">
+                                            {p.photo_url ? <img src={p.photo_url} alt={p.name} className="w-full h-full object-cover" /> : <UserCog className="w-3 h-3 text-neutral-600 m-auto mt-1" />}
+                                        </div>
+                                        <div className="flex-1 min-w-0 text-sm truncate group-hover:text-liv-yellow">{p.name}</div>
+                                        <div className="font-display text-lg text-liv-yellow leading-none flex-shrink-0">{p.assists}</div>
+                                    </Link>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };
