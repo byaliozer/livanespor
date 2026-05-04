@@ -21,6 +21,7 @@ import asyncio
 import httpx
 from slugify import slugify
 from openai import AsyncOpenAI
+from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -692,16 +693,9 @@ async def admin_generate_match_analysis(payload: MatchAnalysisGenerateIn, user=D
     top = sorted(players, key=lambda p: -((p.get('stats') or {}).get('goals') or 0))[:3]
     top_scorer_lines = [f"{p.get('name')} (#{p.get('jersey_number','?')}, {p.get('position','?')}) - {(p.get('stats') or {}).get('goals') or 0} gol" for p in top if ((p.get('stats') or {}).get('goals') or 0) > 0]
 
-    sub = await _ensure_subscription_doc()
-    if (sub.get('credit_balance') or 0) < 1:
+    ok = await consume_credit(1, note=f"match-analysis: {opponent_name}")
+    if not ok:
         raise HTTPException(402, "Yetersiz kredi (1 kredi gerekiyor)")
-    await db.subscription.update_one({'id': 'main'}, {'$inc': {'credit_balance': -1}, '$set': {'updated_at': now_iso()}})
-    await db.credit_ledger.insert_one({
-        'id': new_id(), 'amount': -1,
-        'balance_after': (sub.get('credit_balance') or 0) - 1,
-        'reason': f'match-analysis: {opponent_name}',
-        'created_at': now_iso(),
-    })
 
     facts_block = f"""KULÜP: {own_full}
 RAKİP: {opponent_name}
