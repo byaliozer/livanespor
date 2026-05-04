@@ -640,7 +640,14 @@ async def admin_get_match_analysis(match_id: str, user=Depends(require_admin)):
 
 @api_router.post("/admin/match-analysis/generate")
 async def admin_generate_match_analysis(payload: MatchAnalysisGenerateIn, user=Depends(require_admin)):
-    """Generate AI pre-game analysis. Costs 1 credit. Returns existing report if already generated."""
+    """Generate AI pre-game analysis. Costs 1 credit. Returns existing report if already generated.
+
+    Enriches the LLM prompt with: opponent's last 10 matches (from Mackolik), their
+    home/away breakdown, goal averages, top 3 scorers, tactical weakness hints, and
+    danger-scenario alerts. The goal is expert-commentator-level output.
+    """
+    import match_analysis_enrich as enrich
+
     match = await db.matches.find_one({'id': payload.match_id}, {'_id': 0})
     if not match:
         raise HTTPException(404, "Maç bulunamadı")
@@ -656,92 +663,171 @@ async def admin_generate_match_analysis(payload: MatchAnalysisGenerateIn, user=D
     we_are_home = own_first.lower() in home_team.lower()
     opponent_name = away_team if we_are_home else home_team
 
-    our_recent = await db.matches.find({'status': 'finished'}, {'_id': 0}).sort('match_date', -1).limit(5).to_list(5)
-    our_form = []
-    for m in our_recent:
-        h_low = (m.get('home_team') or '').lower()
-        we_h = own_first.lower() in h_low
-        os_ = m.get('home_score') if we_h else m.get('away_score')
-        ts_ = m.get('away_score') if we_h else m.get('home_score')
-        if os_ is None or ts_ is None:
-            continue
-        opp = m.get('away_team') if we_h else m.get('home_team')
-        result = 'G' if os_ > ts_ else ('B' if os_ == ts_ else 'M')
-        our_form.append(f"{result} {opp} {os_}-{ts_} ({'Ev' if we_h else 'Dep'})")
+    # ── Our form (from our own DB's finished matches)
+    our_recent_raw = await db.matches.find({'status': 'finished'}, {'_id': 0}).sort('match_date', -1).limit(10).to_list(10)
+    our_form = enrich.compute_form_summary(own_first, our_recent_raw, limit=10)
 
+    # ── Standings rows
     standings = await db.standings.find({}, {'_id': 0}).sort('rank', 1).to_list(50)
     our_row = next((s for s in standings if own_first.lower() in (s.get('team_name') or '').lower()), None)
     opp_row = next((s for s in standings if opponent_name and (opponent_name.lower() in (s.get('team_name') or '').lower() or (s.get('team_name') or '').lower() in opponent_name.lower())), None)
 
-    h2h = await db.matches.find({
+    # ── H2H (ours vs opponent, only what's in our DB)
+    h2h_raw = await db.matches.find({
         'status': 'finished',
         '$or': [
-            {'home_team': {'$regex': opponent_name, '$options': 'i'}},
-            {'away_team': {'$regex': opponent_name, '$options': 'i'}},
+            {'$and': [{'home_team': {'$regex': own_first, '$options': 'i'}}, {'away_team': {'$regex': opponent_name, '$options': 'i'}}]},
+            {'$and': [{'away_team': {'$regex': own_first, '$options': 'i'}}, {'home_team': {'$regex': opponent_name, '$options': 'i'}}]},
         ],
     }, {'_id': 0}).sort('match_date', -1).limit(5).to_list(5)
     h2h_summary = []
-    for m in h2h:
-        h_l = (m.get('home_team') or '').lower()
-        we_h = own_first.lower() in h_l
-        os_ = m.get('home_score') if we_h else m.get('away_score')
-        ts_ = m.get('away_score') if we_h else m.get('home_score')
-        if os_ is None or ts_ is None:
+    h2h_wins = h2h_draws = h2h_losses = 0
+    for m in h2h_raw:
+        r = enrich._result_for(own_first, m)
+        if not r:
             continue
-        h2h_summary.append(f"{(m.get('match_date','') or '')[:10]}: {os_}-{ts_} ({'Ev' if we_h else 'Dep'})")
+        res, os_, ts_, is_home, _ = r
+        h2h_summary.append(f"{(m.get('match_date','') or '')[:10]}: {os_}-{ts_} ({'Ev' if is_home else 'Dep'})")
+        if res == 'G':
+            h2h_wins += 1
+        elif res == 'B':
+            h2h_draws += 1
+        else:
+            h2h_losses += 1
 
-    players = await db.players.find({'active': {'$ne': False}}, {'_id': 0}).to_list(100)
-    top = sorted(players, key=lambda p: -((p.get('stats') or {}).get('goals') or 0))[:3]
-    top_scorer_lines = [f"{p.get('name')} (#{p.get('jersey_number','?')}, {p.get('position','?')}) - {(p.get('stats') or {}).get('goals') or 0} gol" for p in top if ((p.get('stats') or {}).get('goals') or 0) > 0]
+    # ── Our top scorers (from our squad)
+    our_players = await db.players.find({'active': {'$ne': False}}, {'_id': 0}).to_list(100)
+    our_top = enrich.top_scorers_from_squad(our_players, n=3)
+    our_top_lines = enrich.format_opp_scorers(our_top) or ["(Oyuncu istatistik verisi yok — Mackolik Sync gerekebilir)"]
 
+    # ── Opponent deep dive via Mackolik (best-effort, ~2-3s)
+    opp_club = await db.opponent_clubs.find_one({'name': {'$regex': f'^{opponent_name}$', '$options': 'i'}}, {'_id': 0})
+    opp_payload = await enrich.fetch_opponent_mackolik(opp_row, opp_club)
+
+    opp_form: Dict[str, Any] = {'total': 0, 'lines': [], 'home': {}, 'away': {}, 'overall': {}, 'last5_streak': ''}
+    opp_top_lines: List[str] = []
+    opp_top_raw: List[Dict[str, Any]] = []
+    if opp_payload:
+        opp_finished = enrich.filter_finished(opp_payload.get('fixtures') or [])
+        opp_form = enrich.compute_form_summary(opponent_name, opp_finished, limit=10)
+        opp_top_raw = enrich.top_scorers_from_squad(opp_payload.get('squad') or [], n=3)
+        opp_top_lines = enrich.format_opp_scorers(opp_top_raw)
+
+    alerts = enrich.danger_scenarios(opp_form, opp_row, we_are_home)
+    alerts = enrich.threat_scorer_alerts(opp_top_raw) + alerts
+
+    # ── Deduct credit BEFORE LLM (refund on failure below)
     ok = await consume_credit(1, note=f"match-analysis: {opponent_name}")
     if not ok:
         raise HTTPException(402, "Yetersiz kredi (1 kredi gerekiyor)")
 
+    # ── Build rich facts block
+    def _fmt_split(label: str, s: Dict[str, Any]) -> str:
+        if not s or s.get('played', 0) == 0:
+            return f"  - {label}: veri yok"
+        return (f"  - {label}: {s['played']} maç, {s['wins']}G {s['draws']}B {s['losses']}M, "
+                f"attığı {s['gf']} / yediği {s['ga']} (maç başı +{s['gf_avg']} / -{s['ga_avg']}), "
+                f"{s['points']} puan (PPM {s['ppm']})")
+
     facts_block = f"""KULÜP: {own_full}
 RAKİP: {opponent_name}
 TARİH: {(match.get('match_date') or '')[:10]}
-SAHA: {match.get('venue') or '—'} ({'Ev sahibiyiz' if we_are_home else 'Deplasmandayız'})
+SAHA: {match.get('venue') or '—'}
+DURUM: {'EV SAHİBİYİZ' if we_are_home else 'DEPLASMANDAYIZ'}
 LİG: {match.get('competition') or '—'}
 
-BİZİM SON 5 MAÇ:
-{chr(10).join('- ' + x for x in our_form) if our_form else '- Veri yok'}
+═══════════════════════════════════════════
+BİZİM PERFORMANS ({own_full})
+═══════════════════════════════════════════
+
+SON MAÇLAR (en yeni üstte):
+{chr(10).join('- ' + x for x in our_form['lines']) if our_form['lines'] else '- Veri yok (henüz maç oynanmamış)'}
+
+{_fmt_split('Ev sahibi iken', our_form['home'])}
+{_fmt_split('Deplasmanda iken', our_form['away'])}
+
+Genel: Son {our_form['total']} maçta maç başı attığımız +{our_form['overall'].get('gf_avg',0)} / yediğimiz -{our_form['overall'].get('ga_avg',0)} gol.
+Temiz çıkış: {our_form['overall'].get('clean_sheets',0)}/{our_form['total']} maç (%{our_form['overall'].get('clean_sheet_pct',0)}).
 
 LİG DURUMU:
-- {own_full}: {f"{our_row.get('rank')}. sıra, {our_row.get('points')} puan, {our_row.get('played')} maç ({our_row.get('wins')}G {our_row.get('draws')}B {our_row.get('losses')}M, {our_row.get('goals_for')}-{our_row.get('goals_against')})" if our_row else 'veri yok'}
-- {opponent_name}: {f"{opp_row.get('rank')}. sıra, {opp_row.get('points')} puan, {opp_row.get('played')} maç ({opp_row.get('wins')}G {opp_row.get('draws')}B {opp_row.get('losses')}M, {opp_row.get('goals_for')}-{opp_row.get('goals_against')})" if opp_row else 'veri yok'}
+- {own_full}: {f"{our_row.get('rank')}. sıra, {our_row.get('points')} puan, {our_row.get('played')} maç ({our_row.get('wins')}G {our_row.get('draws')}B {our_row.get('losses')}M, averaj {our_row.get('goals_for')}-{our_row.get('goals_against')}={our_row.get('goal_difference')})" if our_row else 'veri yok'}
 
-GEÇMİŞ KARŞILAŞMALAR (Bizim açımızdan):
-{chr(10).join('- ' + x for x in h2h_summary) if h2h_summary else '- Geçmiş karşılaşma yok'}
+BİZİM EN GOLCÜ OYUNCULAR:
+{chr(10).join('- ' + x for x in our_top_lines)}
 
-BİZİM EN İYİ FORMADA OYUNCULAR:
-{chr(10).join('- ' + x for x in top_scorer_lines) if top_scorer_lines else '- Veri yok'}"""
+═══════════════════════════════════════════
+RAKİP DERİN ANALİZ ({opponent_name})
+═══════════════════════════════════════════
 
-    system_prompt = """Sen bir Türk futbol kulübünün baş analistisin. Görevin: kulüp BAŞKAN'ı ve yönetim kuruluna sunulacak, profesyonel bir maç önü analiz raporu yazmak.
+LİG DURUMU:
+- {opponent_name}: {f"{opp_row.get('rank')}. sıra, {opp_row.get('points')} puan, {opp_row.get('played')} maç ({opp_row.get('wins')}G {opp_row.get('draws')}B {opp_row.get('losses')}M, averaj {opp_row.get('goals_for')}-{opp_row.get('goals_against')}={opp_row.get('goal_difference')})" if opp_row else 'veri yok'}
 
-Çıktı formatı: Markdown başlıklarla 5 bölüm:
+RAKİBİN SON {opp_form.get('total',0)} MAÇI (Mackolik canlı veri):
+{chr(10).join('- ' + x for x in opp_form.get('lines') or []) if opp_form.get('lines') else '- Mackolik verisi alınamadı'}
+
+RAKİBİN EV/DEPLASMAN AYRIMI:
+{_fmt_split('Kendi sahasında', opp_form.get('home', {}))}
+{_fmt_split('Deplasmanda', opp_form.get('away', {}))}
+
+RAKİBİN GOL İSTATİSTİKLERİ:
+- Son {opp_form.get('total',0)} maçta maç başı +{opp_form.get('overall',{}).get('gf_avg',0)} gol atıyor / -{opp_form.get('overall',{}).get('ga_avg',0)} gol yiyor.
+- Gol yemeden bitirdiği maç: {opp_form.get('overall',{}).get('clean_sheets',0)}/{opp_form.get('total',0)} (%{opp_form.get('overall',{}).get('clean_sheet_pct',0)}).
+- Son 5 seri: {opp_form.get('last5_streak','—')}
+
+RAKİBİN DİKKAT EDİLECEK OYUNCULARI (en golcü 3):
+{chr(10).join('- ' + x for x in opp_top_lines) if opp_top_lines else '- Mackolik kadro verisi alınamadı'}
+
+═══════════════════════════════════════════
+GEÇMİŞ KARŞILAŞMALAR (bizim kayıtlarımızda)
+═══════════════════════════════════════════
+
+{(f"Toplam {len(h2h_summary)} maç: {h2h_wins}G {h2h_draws}B {h2h_losses}M" + chr(10) + chr(10).join('- ' + x for x in h2h_summary)) if h2h_summary else 'Kayıtlarımızda bu rakiple daha önce oynanmış bir maç YOK — ilk kez karşılaşıyoruz.'}
+
+═══════════════════════════════════════════
+OTOMATIK TEHLIKE / FIRSAT UYARILARI
+═══════════════════════════════════════════
+
+{chr(10).join('- ' + x for x in alerts) if alerts else '- Belirgin bir alarm yok, dengeli maç beklenebilir.'}
+"""
+
+    system_prompt = """Sen Süper Amatör Lig'de bir Türk futbol kulübünün BAŞ ANALİSTİSİN. 25 yıllık profesyonel yorumcu tecrübesiyle kulüp BAŞKAN'ı ve teknik ekibine maç önü rapor yazıyorsun. Rapor yönetim kuruluna sunulacak — **prestij** işidir.
+
+ÇIKTI FORMATI (tam olarak bu başlıklarla, Markdown):
 
 ## 1. Genel Değerlendirme
-2-3 cümlede maçın stratejik önemi.
+Maçın stratejik önemi, lig pozisyonları üzerindeki etkisi, psikolojik tablo. 3-5 cümle. Kuru istatistik değil, yorum kat.
 
 ## 2. Bizim Form Analizi
-Son 5 maç yorumu, saha avantajı.
+Son maç sonuçlarımızı yorumla. Ev/deplasman ayrımına DIKKAT et — bu maç ev mi dep mi ona göre hangi tarafımızın güçlü/zayıf olduğunu söyle. Gol üretim/yeme ortalamalarımızı değerlendir. Temiz çıkış oranımızdan bahset. 4-6 cümle.
 
 ## 3. Rakip Analizi
-Rakibin lig durumu, güçlü/zayıf yanları, tehlikeli oldukları bölgeler.
+Bu bölüm RAPORUN EN ÖNEMLİ KISMI. ZORUNLU içerikler:
+- Rakibin son form serisi (GGMBG gibi) ve ne anlama geldiği
+- **Ev/deplasman ayrımı**: Rakip bizim sahamıza geliyorsa, rakibin deplasman istatistiklerini MUTLAKA değerlendir. Tersi için aynısı.
+- Maç başına gol atma/yeme ortalamaları yorumu
+- **En golcü oyuncuları isim + numara + gol sayısıyla** spesifik olarak kim tehlikeli, onlara nasıl dikkat edilmeli
+- Savunma kırılgan mı? Hücumları skor üretiyor mu? Somut rakam göster
+6-10 cümle. Uyarıları dikkate al.
 
 ## 4. Geçmiş Karşılaşmalar
-Veriler varsa özet + psikolojik etki. Yoksa "ilk kez karşılaşıyoruz" bilgisi.
+Eğer H2H verisi varsa: toplam G/B/M, son skor eğilimi, son maçta ne olduğu, psikolojik etkisi. Eğer YOKSA: "ilk kez karşılaşıyoruz — avantaj: rakip bizi tanımıyor, dezavantaj: biz de onları tanımıyoruz, o yüzden rakibin lig maçlarından gelen kalıbına fazla güvenmek riskli" gibi YORUM yap. BOŞ BIRAKMA.
 
 ## 5. Tahmin & Öneri
-- Olası ilk 11 önerisi (mevki bazlı, kısa).
-- Skor tahmini (gerçekçi).
-- MOTM adayı (bizim oyuncularımızdan).
+- **Olası ilk 11 mantığı** (mevki bazlı kısa öneri; elimizdeki en formda oyunculardan yola çıkarak, ama tam kadroyu tahmin etme)
+- **Oyun planı** (2-3 madde: nasıl oynamalıyız — pres yüksek mi, kompakt mı, kanat mı, kontra mı)
+- **SKOR TAHMİNİ (GERÇEKÇİ)**: MUTLAKA rakamsal bir skor (X-Y formatında), hem en olası skor hem de alternatif senaryo (galip gelirsek muhtemel skor / berabere kalırsak muhtemel skor). İki takımın gol ortalamalarına dayan.
+- **MOTM ADAYI (BİZİM OYUNCULARIMIZDAN)**: MUTLAKA bir oyuncu ismi yaz (varsa en golcü oyuncumuzdan seç, yoksa "güncel kadro verisi olmadığı için isim belirtemiyorum, ancak santrfor mevkimizde bitiriciliği iyi bir isim kilit olacak" gibi yorum yap). BOŞ BIRAKMA.
 
-KURALLAR:
-- VERİDE OLMAYAN ŞEY UYDURMA.
-- Veri eksikse açıkça söyle.
-- 600-800 kelime. Profesyonel ama özlü."""
+## 6. Özet Uyarılar
+Verilen otomatik uyarıları (tehlike/fırsat) kısa madde madde listele ve her birine bir yorum cümlesi ekle. Eğer uyarı yoksa "belirgin kırmızı alarm yok, dengeli maç" de.
+
+KURALLAR (ÇOK ÖNEMLİ):
+1. **ASLA BOŞ BÖLÜM BIRAKMA**. Her başlığın altında en az 3 cümle içerik olmalı.
+2. **SPESİFİK RAKAMLAR KULLAN**: "iyi form" değil, "son 5'te 4 galibiyet, maç başı 2.4 gol" gibi.
+3. **VERİDE OLMAYAN İSİM/İSTATİSTİK UYDURMA**. Veri yoksa açıkça söyle ama yorumla kurtar.
+4. **Uzman yorumcu tonu**: şablon cümle yok, gerçek bir analist gibi konuş. "Bence", "dikkat", "tehlike" gibi yorumcu ifadeleri kullan.
+5. Türkçe, profesyonel ama samimi ton. 700-1000 kelime.
+6. Skor tahmini ve MOTM ismini MUTLAKA yaz — bu iki şey boş kalırsa rapor BAŞARISIZ sayılır."""
 
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
@@ -769,10 +855,17 @@ KURALLAR:
         'opponent_name': opponent_name,
         'match_date': (match.get('match_date') or '')[:10],
         'we_are_home': we_are_home,
-        'our_form': our_form,
+        'our_form': our_form['lines'],
+        'our_form_summary': our_form,
+        'opp_form_summary': opp_form,
+        'opp_top_scorers': opp_top_lines,
+        'our_top_scorers': our_top_lines,
         'h2h_summary': h2h_summary,
+        'h2h_record': {'wins': h2h_wins, 'draws': h2h_draws, 'losses': h2h_losses},
+        'alerts': alerts,
         'our_standing': our_row,
         'opp_standing': opp_row,
+        'opponent_mackolik_used': bool(opp_payload),
         'content_markdown': content,
         'generated_at': now_iso(),
         'generated_by': user.get('id'),

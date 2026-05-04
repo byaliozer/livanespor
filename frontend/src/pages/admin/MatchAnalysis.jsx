@@ -138,22 +138,87 @@ const MatchAnalysis = () => {
                             <div className="prose prose-invert max-w-none">
                                 {renderMarkdown(report.content_markdown)}
                             </div>
-                            {(report.our_form?.length || report.h2h_summary?.length) && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6 pt-4 border-t border-liv-border">
-                                    {report.our_form?.length > 0 && (
-                                        <div>
-                                            <div className="text-[10px] uppercase tracking-widest text-neutral-500 mb-2">Bizim Son 5 Maç (kaynak veri)</div>
-                                            <ul className="text-xs text-neutral-400 space-y-0.5">
-                                                {report.our_form.map((f, i) => <li key={i}>· {f}</li>)}
+                            {(report.our_form?.length || report.h2h_summary?.length || report.opp_form_summary?.lines?.length || report.alerts?.length || report.opp_top_scorers?.length) && (
+                                <div className="mt-6 pt-4 border-t border-liv-border space-y-5">
+                                    {report.alerts?.length > 0 && (
+                                        <div className="bg-amber-500/5 border border-amber-500/30 p-4 rounded">
+                                            <div className="text-[10px] uppercase tracking-widest text-amber-400 mb-2 font-bold">⚡ Otomatik Tehlike / Fırsat Uyarıları</div>
+                                            <ul className="text-xs text-neutral-300 space-y-1">
+                                                {report.alerts.map((a, i) => <li key={i} className={a.startsWith("⚠️") ? "text-amber-200" : a.startsWith("✓") ? "text-emerald-300" : "text-neutral-300"}>{a}</li>)}
                                             </ul>
                                         </div>
                                     )}
-                                    {report.h2h_summary?.length > 0 && (
+
+                                    {(report.opp_form_summary?.home?.played > 0 || report.opp_form_summary?.away?.played > 0) && (
                                         <div>
-                                            <div className="text-[10px] uppercase tracking-widest text-neutral-500 mb-2">Geçmiş Karşılaşmalar (kaynak veri)</div>
-                                            <ul className="text-xs text-neutral-400 space-y-0.5">
-                                                {report.h2h_summary.map((f, i) => <li key={i}>· {f}</li>)}
-                                            </ul>
+                                            <div className="text-[10px] uppercase tracking-widest text-liv-yellow mb-2 font-bold">🔍 Rakip Ev / Deplasman Ayrımı ({report.opponent_name})</div>
+                                            <div className="grid grid-cols-2 gap-3 text-xs">
+                                                {["home", "away"].map((k) => {
+                                                    const s = report.opp_form_summary?.[k] || {};
+                                                    const label = k === "home" ? "Kendi sahasında" : "Deplasmanda";
+                                                    return (
+                                                        <div key={k} className="bg-liv-surface/60 border border-liv-border p-3 rounded">
+                                                            <div className="text-[10px] uppercase text-neutral-500 mb-1">{label}</div>
+                                                            {s.played > 0 ? (
+                                                                <>
+                                                                    <div className="text-neutral-200">{s.played} maç · {s.wins}G {s.draws}B {s.losses}M</div>
+                                                                    <div className="text-neutral-400 mt-1">Maç başı: <span className="text-emerald-400">+{s.gf_avg}</span> / <span className="text-red-400">-{s.ga_avg}</span></div>
+                                                                    <div className="text-neutral-500 text-[11px] mt-1">PPM: {s.ppm}</div>
+                                                                </>
+                                                            ) : <div className="text-neutral-600">veri yok</div>}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {report.opp_form_summary?.lines?.length > 0 && (
+                                            <div>
+                                                <div className="text-[10px] uppercase tracking-widest text-neutral-500 mb-2">Rakibin Son Maçları · {report.opponent_name} (Mackolik canlı)</div>
+                                                <ul className="text-xs text-neutral-400 space-y-0.5">
+                                                    {report.opp_form_summary.lines.slice(0, 10).map((f, i) => <li key={i} className={f.startsWith("G") ? "text-emerald-400" : f.startsWith("M") ? "text-red-400" : "text-neutral-400"}>· {f}</li>)}
+                                                </ul>
+                                            </div>
+                                        )}
+                                        {report.opp_top_scorers?.length > 0 && (
+                                            <div>
+                                                <div className="text-[10px] uppercase tracking-widest text-liv-yellow mb-2 font-bold">⚠️ Rakibin Hücum Hattı (dikkat)</div>
+                                                <ul className="text-xs text-neutral-300 space-y-1">
+                                                    {report.opp_top_scorers.map((s, i) => <li key={i}>· {s}</li>)}
+                                                </ul>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {report.our_form?.length > 0 && (
+                                            <div>
+                                                <div className="text-[10px] uppercase tracking-widest text-neutral-500 mb-2">Bizim Son Maçlarımız (kaynak veri)</div>
+                                                <ul className="text-xs text-neutral-400 space-y-0.5">
+                                                    {report.our_form.map((f, i) => <li key={i} className={f.startsWith("G") ? "text-emerald-400" : f.startsWith("M") ? "text-red-400" : "text-neutral-400"}>· {f}</li>)}
+                                                </ul>
+                                            </div>
+                                        )}
+                                        {report.h2h_summary?.length > 0 ? (
+                                            <div>
+                                                <div className="text-[10px] uppercase tracking-widest text-neutral-500 mb-2">Geçmiş Karşılaşmalar ({report.h2h_record?.wins}G {report.h2h_record?.draws}B {report.h2h_record?.losses}M)</div>
+                                                <ul className="text-xs text-neutral-400 space-y-0.5">
+                                                    {report.h2h_summary.map((f, i) => <li key={i}>· {f}</li>)}
+                                                </ul>
+                                            </div>
+                                        ) : (
+                                            <div>
+                                                <div className="text-[10px] uppercase tracking-widest text-neutral-500 mb-2">Geçmiş Karşılaşmalar</div>
+                                                <div className="text-xs text-neutral-500 italic">Kayıtlarımızda bu rakiple oynanmış maç yok — ilk kez karşılaşıyoruz.</div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {report.opponent_mackolik_used === false && (
+                                        <div className="text-[11px] text-amber-500/70 italic">
+                                            ⚠️ Rakibin Mackolik verisi çekilemedi — analiz sınırlı veriyle üretildi. Rakibi /admin/mackolik'ten ekleyin.
                                         </div>
                                     )}
                                 </div>
