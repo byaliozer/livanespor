@@ -5,7 +5,7 @@ import { APP_VERSION, BUILD_DATE } from "@/version";
 import {
     LayoutDashboard, Users, UserCog, Calendar, Trophy, Sparkles, Image,
     Newspaper, GraduationCap, ClipboardList, Settings, LogOut, Layers,
-    Mail, Wand2, ShieldQuestion, KeyRound, RefreshCw, Package
+    Mail, Wand2, ShieldQuestion, KeyRound, RefreshCw, Package, DollarSign, FileText, Brain
 } from "lucide-react";
 
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_401d88f4-8dae-48a8-9716-45cb5be0ec5c/artifacts/4x1k75zi_Livanespor_SARI_SIYAH_NEW%20genelde%20bu.png";
@@ -27,6 +27,9 @@ const NAV = [
     { to: "/admin/applications", label: "Başvurular", icon: ClipboardList, group: "Akademi" },
     { to: "/admin/trainings", label: "Antrenman Takvimi", icon: Calendar, group: "Antrenman Yönetimi" },
     { to: "/admin/attendance", label: "Yoklama", icon: ClipboardList, group: "Antrenman Yönetimi" },
+    { to: "/admin/match-analysis", label: "Maç Önü Analizi", icon: Brain, group: "Saha Operasyonu" },
+    { to: "/admin/finance", label: "Mali Modül (Kasa)", icon: DollarSign, group: "Yönetim" },
+    { to: "/admin/contracts", label: "Sözleşmeler & Ödemeler", icon: FileText, group: "Yönetim" },
     { to: "/admin/messages", label: "Mesajlar", icon: Mail, group: "İletişim" },
     { to: "/admin/media", label: "Medya Arşivi", icon: Image, group: "İçerik" },
     { to: "/admin/team-photos", label: "Takım Fotoğrafları", icon: Image, group: "İçerik" },

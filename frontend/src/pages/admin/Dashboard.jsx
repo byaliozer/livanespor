@@ -1,12 +1,58 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { adminApi } from "@/lib/api";
+import { api } from "@/lib/api";
 import { formatDateTR, formatTimeTR } from "@/lib/dateFormat";
 import {
     Trophy, Calendar, Cake, Mail, Newspaper, Sparkles,
     Plus, Wand2, RefreshCw, Package,
     UserCog, Users, ClipboardList, CheckCircle, XCircle,
+    DollarSign, FileText, Brain, AlertCircle, TrendingUp, TrendingDown,
 } from "lucide-react";
+
+// Dashboard kartı: Bir sonraki maç için AI analizi (DR AI FUTBOL imzalı)
+const NextMatchAnalysisCard = () => {
+    const [data, setData] = useState(null);
+    useEffect(() => {
+        api.get("/admin/match-analysis/upcoming/next").then((r) => setData(r.data)).catch(() => setData({ match: null, report: null }));
+    }, []);
+    if (!data) return <div className="bg-liv-card border border-liv-border p-5 rounded-md text-neutral-500 text-sm">Yükleniyor…</div>;
+    if (!data.match) {
+        return (
+            <div className="bg-liv-card border border-liv-border p-5 rounded-md" data-testid="dashboard-match-analysis-card">
+                <div className="flex items-center justify-between mb-2">
+                    <div className="overline">Maç Önü Analizi</div>
+                    <Brain className="w-5 h-5 text-liv-yellow/70" />
+                </div>
+                <div className="text-sm text-neutral-500">Yaklaşan maç yok</div>
+                <div className="text-[10px] text-liv-yellow/80 mt-2 uppercase tracking-widest">DR AI FUTBOL</div>
+            </div>
+        );
+    }
+    const opp = data.match.opponent || data.match.away_team;
+    return (
+        <Link to="/admin/match-analysis" className="bg-liv-card border border-liv-border hover:border-liv-yellow p-5 rounded-md block transition" data-testid="dashboard-match-analysis-card">
+            <div className="flex items-center justify-between mb-2">
+                <div className="overline inline-flex items-center gap-1.5"><Brain className="w-3.5 h-3.5 text-liv-yellow" /> Rakip Maç Analizi</div>
+                <span className="text-[10px] uppercase tracking-widest text-liv-yellow/70 font-bold">DR AI FUTBOL</span>
+            </div>
+            <div className="font-display text-2xl">vs {opp}</div>
+            <div className="text-xs text-neutral-400 mt-1">{(data.match.match_date || "").slice(0, 10)} · {data.match.venue || "—"}</div>
+            {data.report ? (
+                <div className="mt-3 pt-3 border-t border-liv-border/60">
+                    <div className="text-[10px] text-emerald-400 uppercase tracking-widest mb-1">✓ Analiz Hazır</div>
+                    <div className="text-xs text-neutral-300 line-clamp-3">{(data.report.content_markdown || "").replace(/^##\s/gm, "").slice(0, 200)}…</div>
+                    <div className="text-[10px] text-liv-yellow mt-2 uppercase tracking-widest">Devamını oku →</div>
+                </div>
+            ) : (
+                <div className="mt-3 pt-3 border-t border-liv-border/60">
+                    <div className="text-xs text-amber-300">Henüz analiz yok</div>
+                    <div className="text-[10px] text-liv-yellow mt-1 uppercase tracking-widest">Analizi oluştur (1 kredi) →</div>
+                </div>
+            )}
+        </Link>
+    );
+};
 
 // Eski tarz büyük StatCard
 const StatCard = ({ icon: Icon, label, value, accent = false, to }) => (
@@ -144,6 +190,44 @@ const AdminDashboard = () => {
                         <div><div className="text-neutral-500">Son Sync</div><div className="font-semibold text-neutral-200">{macko.last_sync_at ? new Date(macko.last_sync_at).toLocaleString("tr-TR") : "—"}</div></div>
                     </div>
                 </Link>
+            </div>
+
+            {/* Mali Durum + Sözleşme Uyarısı + Maç Önü Analizi (DR AI FUTBOL) */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* Mali */}
+                <Link to="/admin/finance" className="bg-liv-card border border-liv-border hover:border-liv-yellow p-5 transition rounded-md" data-testid="dashboard-finance-card">
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="overline">Bu Ay Kasa</div>
+                        <DollarSign className="w-5 h-5 text-liv-yellow/70" />
+                    </div>
+                    <div className={`font-display text-3xl ${(stats.finance?.this_month?.net ?? 0) >= 0 ? "text-liv-yellow" : "text-red-400"}`}>
+                        ₺{(stats.finance?.this_month?.net ?? 0).toLocaleString("tr-TR")}
+                    </div>
+                    <div className="mt-2 flex gap-3 text-xs">
+                        <span className="text-emerald-400 inline-flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> ₺{(stats.finance?.this_month?.income ?? 0).toLocaleString("tr-TR")}</span>
+                        <span className="text-red-400 inline-flex items-center gap-1"><TrendingDown className="w-3.5 h-3.5" /> ₺{(stats.finance?.this_month?.expense ?? 0).toLocaleString("tr-TR")}</span>
+                    </div>
+                    <div className="text-[10px] text-neutral-500 mt-2">Geçen ay net: <span className={(stats.finance?.last_month_net ?? 0) >= 0 ? "text-neutral-300" : "text-red-400"}>₺{(stats.finance?.last_month_net ?? 0).toLocaleString("tr-TR")}</span></div>
+                </Link>
+
+                {/* Sözleşme uyarı */}
+                <Link to="/admin/contracts" className="bg-liv-card border border-liv-border hover:border-liv-yellow p-5 transition rounded-md" data-testid="dashboard-contracts-card">
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="overline">90 Gün İçinde Biten Sözleşmeler</div>
+                        <FileText className="w-5 h-5 text-liv-yellow/70" />
+                    </div>
+                    <div className="font-display text-4xl text-liv-yellow">{(stats.contracts_expiring_90d || []).length}</div>
+                    {(stats.contracts_expiring_90d || []).length === 0 ? (
+                        <div className="text-xs text-neutral-500 mt-2">Yakın sözleşme bitişi yok ✓</div>
+                    ) : (
+                        <ul className="text-xs text-amber-300 mt-2 space-y-0.5">
+                            {stats.contracts_expiring_90d.slice(0, 3).map((c) => <li key={c.id} className="inline-flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {c.end_date}</li>)}
+                        </ul>
+                    )}
+                </Link>
+
+                {/* Maç Önü Analizi */}
+                <NextMatchAnalysisCard />
             </div>
 
             {/* Bottom: Yaklaşan maçlar + Hızlı aksiyonlar + Doğum günleri */}

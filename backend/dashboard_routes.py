@@ -159,6 +159,39 @@ def register_dashboard_routes(
         seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
         media_last_7_days = await db.media.count_documents({'created_at': {'$gte': seven_days_ago}})
 
+        # ─── Finance: this month vs last month + 6-month chart ───
+        today_d = datetime.now(timezone.utc).date()
+        this_mk = f"{today_d.year}-{today_d.month:02d}"
+        fin_rows = await db.finance_transactions.find({}, {'_id': 0, 'date': 1, 'amount': 1, 'type': 1}).to_list(5000)
+        fin_months_keys: List[str] = []
+        cm = today_d.replace(day=1)
+        for _ in range(6):
+            fin_months_keys.append(f"{cm.year}-{cm.month:02d}")
+            cm = cm.replace(year=cm.year - 1, month=12) if cm.month == 1 else cm.replace(month=cm.month - 1)
+        fin_months_keys = list(reversed(fin_months_keys))
+        fin_chart = {m: {'income': 0.0, 'expense': 0.0, 'net': 0.0} for m in fin_months_keys}
+        fin_this = {'income': 0.0, 'expense': 0.0, 'net': 0.0}
+        for r in fin_rows:
+            d = (r.get('date') or '')[:10]
+            mk = d[:7] if d else ''
+            amount = float(r.get('amount') or 0)
+            ttype = r.get('type') or 'expense'
+            if mk in fin_chart:
+                fin_chart[mk][ttype if ttype in ('income', 'expense') else 'expense'] += amount
+                fin_chart[mk]['net'] = fin_chart[mk]['income'] - fin_chart[mk]['expense']
+            if mk == this_mk:
+                fin_this[ttype if ttype in ('income', 'expense') else 'expense'] += amount
+        fin_this['net'] = fin_this['income'] - fin_this['expense']
+        fin_last_net = fin_chart[fin_months_keys[-2]]['net'] if len(fin_months_keys) >= 2 else 0
+        fin_chart_list = [{'month': m, **fin_chart[m]} for m in fin_months_keys]
+
+        # ─── Contracts expiring within 90 days ───
+        ninety_iso = (today_d + timedelta(days=90)).isoformat()
+        contracts_expiring = await db.player_contracts.find(
+            {'end_date': {'$gte': today_d.isoformat(), '$lte': ninety_iso}},
+            {'_id': 0}
+        ).sort('end_date', 1).to_list(20)
+
         # ─── Attendance widgets (last 30 days) ───
         thirty_days_ago_iso = (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
         att_rows = await db.attendance_records.find(
@@ -279,6 +312,12 @@ def register_dashboard_routes(
             'opponents_total': opponents_total,
             'missing_opponent_logos': missing_opponent_logos,
             'media_last_7_days': media_last_7_days,
+            'finance': {
+                'this_month': fin_this,
+                'last_month_net': fin_last_net,
+                'chart': fin_chart_list,
+            },
+            'contracts_expiring_90d': contracts_expiring,
             'attendance_no_shows': no_shows[:5],
             'attendance_champions': champions[:5],
             'attendance_week_summary': {

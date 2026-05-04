@@ -287,6 +287,9 @@ COLLECTIONS = {
     'opponent_clubs': {'public': False, 'slug_field': 'name'},
     'team_trainings': {'public': False, 'slug_field': None},
     'attendance_records': {'public': False, 'slug_field': None},
+    'finance_transactions': {'public': False, 'slug_field': None},
+    'player_contracts': {'public': False, 'slug_field': None},
+    'player_payments': {'public': False, 'slug_field': None},
 }
 
 async def _list(coll: str, public_only: bool = False, filters: Optional[dict] = None, sort_field: str = 'created_at', sort_dir: int = -1, limit: int = 500):
@@ -535,6 +538,261 @@ async def admin_player_attendance_history(player_id: str, limit: int = 10, user=
         'absent_count': absent,
         'attendance_pct': pct,
     }
+
+
+# ─────────────────────────── Player Financial Summary ───────────────────────────
+@api_router.get("/admin/players/{player_id}/financial-summary")
+async def admin_player_financial(player_id: str, user=Depends(require_admin)):
+    """Return contract + total paid + breakdown by payment_type for a player."""
+    contracts = await db.player_contracts.find({'player_id': player_id}, {'_id': 0}).sort('start_date', -1).to_list(50)
+    payments = await db.player_payments.find({'player_id': player_id}, {'_id': 0}).sort('date', -1).to_list(500)
+    total_paid = sum(float(p.get('amount') or 0) for p in payments)
+    by_type: Dict[str, float] = {}
+    for p in payments:
+        t = p.get('payment_type') or 'diğer'
+        by_type[t] = by_type.get(t, 0) + float(p.get('amount') or 0)
+    today_iso = datetime.now(timezone.utc).date().isoformat()
+    active_contract = next((c for c in contracts if not c.get('end_date') or c.get('end_date') >= today_iso), None)
+    contracted = float(active_contract.get('total_amount') or 0) if active_contract else 0
+    return {
+        'contracts': contracts,
+        'active_contract': active_contract,
+        'payments': payments,
+        'total_paid': total_paid,
+        'contracted_amount': contracted,
+        'remaining': max(0, contracted - total_paid) if contracted else None,
+        'by_type': by_type,
+    }
+
+
+# ─────────────────────────── Finance Summary ───────────────────────────
+@api_router.get("/admin/finance/summary")
+async def admin_finance_summary(user=Depends(require_admin)):
+    """Monthly cash position + last 6 months chart + category breakdown."""
+    rows = await db.finance_transactions.find({}, {'_id': 0}).sort('date', -1).to_list(5000)
+    today = datetime.now(timezone.utc).date()
+    this_month_key = f"{today.year}-{today.month:02d}"
+    months: List[str] = []
+    cm = today.replace(day=1)
+    for _ in range(6):
+        months.append(f"{cm.year}-{cm.month:02d}")
+        cm = cm.replace(year=cm.year - 1, month=12) if cm.month == 1 else cm.replace(month=cm.month - 1)
+    months = list(reversed(months))
+    chart = {m: {'income': 0.0, 'expense': 0.0, 'net': 0.0} for m in months}
+    by_category: Dict[str, Dict[str, float]] = {}
+    this_month = {'income': 0.0, 'expense': 0.0, 'net': 0.0}
+    for r in rows:
+        d = (r.get('date') or '')[:10]
+        if not d:
+            continue
+        mk = d[:7]
+        amount = float(r.get('amount') or 0)
+        ttype = r.get('type') or 'expense'
+        if mk in chart:
+            if ttype == 'income':
+                chart[mk]['income'] += amount
+            else:
+                chart[mk]['expense'] += amount
+            chart[mk]['net'] = chart[mk]['income'] - chart[mk]['expense']
+        if mk == this_month_key:
+            if ttype == 'income':
+                this_month['income'] += amount
+            else:
+                this_month['expense'] += amount
+            this_month['net'] = this_month['income'] - this_month['expense']
+        cat = r.get('category') or 'Diğer'
+        slot = by_category.setdefault(cat, {'income': 0.0, 'expense': 0.0})
+        slot[ttype if ttype in ('income', 'expense') else 'expense'] += amount
+    last_month_key = months[-2] if len(months) >= 2 else None
+    last_month_net = chart[last_month_key]['net'] if last_month_key else 0
+    chart_list = [{'month': m, **chart[m]} for m in months]
+    pending_total = sum(float(r.get('amount') or 0) for r in rows if r.get('paid') is False and r.get('type') == 'income')
+    pending_count = sum(1 for r in rows if r.get('paid') is False)
+    return {
+        'this_month': this_month,
+        'this_month_key': this_month_key,
+        'last_month_net': last_month_net,
+        'chart': chart_list,
+        'by_category': by_category,
+        'pending_count': pending_count,
+        'pending_total': pending_total,
+        'recent': rows[:10],
+    }
+
+
+# ─────────────────────────── Match Pre-Game Analysis (AI) ───────────────────────────
+class MatchAnalysisGenerateIn(BaseModel):
+    match_id: str
+
+
+@api_router.get("/admin/match-analysis/{match_id}")
+async def admin_get_match_analysis(match_id: str, user=Depends(require_admin)):
+    # Lazy auto-reset: if match is finished, delete the report
+    match = await db.matches.find_one({'id': match_id}, {'_id': 0, 'status': 1})
+    if match and match.get('status') == 'finished':
+        await db.match_reports.delete_one({'match_id': match_id})
+        return {}
+    rep = await db.match_reports.find_one({'match_id': match_id}, {'_id': 0})
+    return rep or {}
+
+
+@api_router.post("/admin/match-analysis/generate")
+async def admin_generate_match_analysis(payload: MatchAnalysisGenerateIn, user=Depends(require_admin)):
+    """Generate AI pre-game analysis. Costs 1 credit. Returns existing report if already generated."""
+    match = await db.matches.find_one({'id': payload.match_id}, {'_id': 0})
+    if not match:
+        raise HTTPException(404, "Maç bulunamadı")
+    existing = await db.match_reports.find_one({'match_id': payload.match_id}, {'_id': 0})
+    if existing:
+        return existing
+
+    site = await db.site_settings.find_one({'id': 'main'}, {'_id': 0}) or {}
+    own_full = (site.get('site_title') or 'Livanespor').strip()
+    own_first = own_full.split()[0] if own_full.split() else own_full
+    home_team = match.get('home_team') or ''
+    away_team = match.get('away_team') or ''
+    we_are_home = own_first.lower() in home_team.lower()
+    opponent_name = away_team if we_are_home else home_team
+
+    our_recent = await db.matches.find({'status': 'finished'}, {'_id': 0}).sort('match_date', -1).limit(5).to_list(5)
+    our_form = []
+    for m in our_recent:
+        h_low = (m.get('home_team') or '').lower()
+        we_h = own_first.lower() in h_low
+        os_ = m.get('home_score') if we_h else m.get('away_score')
+        ts_ = m.get('away_score') if we_h else m.get('home_score')
+        if os_ is None or ts_ is None:
+            continue
+        opp = m.get('away_team') if we_h else m.get('home_team')
+        result = 'G' if os_ > ts_ else ('B' if os_ == ts_ else 'M')
+        our_form.append(f"{result} {opp} {os_}-{ts_} ({'Ev' if we_h else 'Dep'})")
+
+    standings = await db.standings.find({}, {'_id': 0}).sort('rank', 1).to_list(50)
+    our_row = next((s for s in standings if own_first.lower() in (s.get('team_name') or '').lower()), None)
+    opp_row = next((s for s in standings if opponent_name and (opponent_name.lower() in (s.get('team_name') or '').lower() or (s.get('team_name') or '').lower() in opponent_name.lower())), None)
+
+    h2h = await db.matches.find({
+        'status': 'finished',
+        '$or': [
+            {'home_team': {'$regex': opponent_name, '$options': 'i'}},
+            {'away_team': {'$regex': opponent_name, '$options': 'i'}},
+        ],
+    }, {'_id': 0}).sort('match_date', -1).limit(5).to_list(5)
+    h2h_summary = []
+    for m in h2h:
+        h_l = (m.get('home_team') or '').lower()
+        we_h = own_first.lower() in h_l
+        os_ = m.get('home_score') if we_h else m.get('away_score')
+        ts_ = m.get('away_score') if we_h else m.get('home_score')
+        if os_ is None or ts_ is None:
+            continue
+        h2h_summary.append(f"{(m.get('match_date','') or '')[:10]}: {os_}-{ts_} ({'Ev' if we_h else 'Dep'})")
+
+    players = await db.players.find({'active': {'$ne': False}}, {'_id': 0}).to_list(100)
+    top = sorted(players, key=lambda p: -((p.get('stats') or {}).get('goals') or 0))[:3]
+    top_scorer_lines = [f"{p.get('name')} (#{p.get('jersey_number','?')}, {p.get('position','?')}) - {(p.get('stats') or {}).get('goals') or 0} gol" for p in top if ((p.get('stats') or {}).get('goals') or 0) > 0]
+
+    sub = await _ensure_subscription_doc()
+    if (sub.get('credit_balance') or 0) < 1:
+        raise HTTPException(402, "Yetersiz kredi (1 kredi gerekiyor)")
+    await db.subscription.update_one({'id': 'main'}, {'$inc': {'credit_balance': -1}, '$set': {'updated_at': now_iso()}})
+    await db.credit_ledger.insert_one({
+        'id': new_id(), 'amount': -1,
+        'balance_after': (sub.get('credit_balance') or 0) - 1,
+        'reason': f'match-analysis: {opponent_name}',
+        'created_at': now_iso(),
+    })
+
+    facts_block = f"""KULÜP: {own_full}
+RAKİP: {opponent_name}
+TARİH: {(match.get('match_date') or '')[:10]}
+SAHA: {match.get('venue') or '—'} ({'Ev sahibiyiz' if we_are_home else 'Deplasmandayız'})
+LİG: {match.get('competition') or '—'}
+
+BİZİM SON 5 MAÇ:
+{chr(10).join('- ' + x for x in our_form) if our_form else '- Veri yok'}
+
+LİG DURUMU:
+- {own_full}: {f"{our_row.get('rank')}. sıra, {our_row.get('points')} puan, {our_row.get('played')} maç ({our_row.get('wins')}G {our_row.get('draws')}B {our_row.get('losses')}M, {our_row.get('goals_for')}-{our_row.get('goals_against')})" if our_row else 'veri yok'}
+- {opponent_name}: {f"{opp_row.get('rank')}. sıra, {opp_row.get('points')} puan, {opp_row.get('played')} maç ({opp_row.get('wins')}G {opp_row.get('draws')}B {opp_row.get('losses')}M, {opp_row.get('goals_for')}-{opp_row.get('goals_against')})" if opp_row else 'veri yok'}
+
+GEÇMİŞ KARŞILAŞMALAR (Bizim açımızdan):
+{chr(10).join('- ' + x for x in h2h_summary) if h2h_summary else '- Geçmiş karşılaşma yok'}
+
+BİZİM EN İYİ FORMADA OYUNCULAR:
+{chr(10).join('- ' + x for x in top_scorer_lines) if top_scorer_lines else '- Veri yok'}"""
+
+    system_prompt = """Sen bir Türk futbol kulübünün baş analistisin. Görevin: kulüp BAŞKAN'ı ve yönetim kuruluna sunulacak, profesyonel bir maç önü analiz raporu yazmak.
+
+Çıktı formatı: Markdown başlıklarla 5 bölüm:
+
+## 1. Genel Değerlendirme
+2-3 cümlede maçın stratejik önemi.
+
+## 2. Bizim Form Analizi
+Son 5 maç yorumu, saha avantajı.
+
+## 3. Rakip Analizi
+Rakibin lig durumu, güçlü/zayıf yanları, tehlikeli oldukları bölgeler.
+
+## 4. Geçmiş Karşılaşmalar
+Veriler varsa özet + psikolojik etki. Yoksa "ilk kez karşılaşıyoruz" bilgisi.
+
+## 5. Tahmin & Öneri
+- Olası ilk 11 önerisi (mevki bazlı, kısa).
+- Skor tahmini (gerçekçi).
+- MOTM adayı (bizim oyuncularımızdan).
+
+KURALLAR:
+- VERİDE OLMAYAN ŞEY UYDURMA.
+- Veri eksikse açıkça söyle.
+- 600-800 kelime. Profesyonel ama özlü."""
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise HTTPException(500, "LLM key tanımlı değil")
+    chat = LlmChat(api_key=api_key, session_id=f"match-analysis-{new_id()[:8]}", system_message=system_prompt).with_model("openai", "gpt-5.2")
+    raw = await chat.send_message(UserMessage(text=facts_block))
+    content = str(raw).strip()
+
+    report = {
+        'id': new_id(),
+        'match_id': payload.match_id,
+        'opponent_name': opponent_name,
+        'match_date': (match.get('match_date') or '')[:10],
+        'we_are_home': we_are_home,
+        'our_form': our_form,
+        'h2h_summary': h2h_summary,
+        'our_standing': our_row,
+        'opp_standing': opp_row,
+        'content_markdown': content,
+        'generated_at': now_iso(),
+        'generated_by': user.get('id'),
+        'credits_used': 1,
+    }
+    await db.match_reports.insert_one(report)
+    report.pop('_id', None)
+    return report
+
+
+@api_router.delete("/admin/match-analysis/{match_id}")
+async def admin_delete_match_analysis(match_id: str, user=Depends(require_admin)):
+    r = await db.match_reports.delete_one({'match_id': match_id})
+    return {'ok': True, 'deleted': r.deleted_count}
+
+
+@api_router.get("/admin/match-analysis/upcoming/next")
+async def admin_next_match_analysis(user=Depends(require_admin)):
+    """Returns: { match: {...}, report: {...} or None }. Used by dashboard widget."""
+    # Cleanup any reports for matches that became finished
+    finished_ids = [m.get('id') async for m in db.matches.find({'status': 'finished'}, {'_id': 0, 'id': 1})]
+    if finished_ids:
+        await db.match_reports.delete_many({'match_id': {'$in': finished_ids}})
+    next_m = await db.matches.find_one({'status': 'upcoming'}, {'_id': 0}, sort=[('match_date', 1)])
+    if not next_m:
+        return {'match': None, 'report': None}
+    rep = await db.match_reports.find_one({'match_id': next_m.get('id')}, {'_id': 0})
+    return {'match': next_m, 'report': rep}
 
 
 # ─────────────────────────── Site Settings ───────────────────────────
@@ -1464,7 +1722,7 @@ async def admin_ai_gallery_seed(payload: GallerySeedIn, user=Depends(require_adm
 
 
 class GalleryImportIn(BaseModel):
-    source_url: str  # e.g. https://spor-panel-pro.preview.emergentagent.com
+    source_url: str  # e.g. https://club-dashboard-pro-2.preview.emergentagent.com
     template_keys: Optional[List[str]] = None  # if None → all 9
     per_template: int = 6  # max items per template
 

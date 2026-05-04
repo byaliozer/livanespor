@@ -52,6 +52,9 @@ import AdminMackolik from "@/pages/admin/MackolikSync";
 import AdminPaketim from "@/pages/admin/Paketim";
 import AdminTrainings from "@/pages/admin/Trainings";
 import AdminAttendance from "@/pages/admin/Attendance";
+import AdminFinance from "@/pages/admin/Finance";
+import AdminContracts from "@/pages/admin/Contracts";
+import AdminMatchAnalysis from "@/pages/admin/MatchAnalysis";
 
 function App() {
     return (
@@ -106,6 +109,9 @@ function App() {
                     <Route path="/admin/paketim" element={<AdminLayout><AdminPaketim /></AdminLayout>} />
                     <Route path="/admin/trainings" element={<AdminLayout><AdminTrainings /></AdminLayout>} />
                     <Route path="/admin/attendance" element={<AdminLayout><AdminAttendance /></AdminLayout>} />
+                    <Route path="/admin/finance" element={<AdminLayout><AdminFinance /></AdminLayout>} />
+                    <Route path="/admin/contracts" element={<AdminLayout><AdminContracts /></AdminLayout>} />
+                    <Route path="/admin/match-analysis" element={<AdminLayout><AdminMatchAnalysis /></AdminLayout>} />
                 </Routes>
             </BrowserRouter>
         </AuthProvider>
