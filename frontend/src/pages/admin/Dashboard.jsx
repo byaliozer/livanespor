@@ -5,7 +5,7 @@ import { formatDateTR, formatTimeTR } from "@/lib/dateFormat";
 import {
     Trophy, Calendar, Cake, Mail, Newspaper, Sparkles,
     Plus, Wand2, RefreshCw, Package,
-    UserCog, Users, ClipboardList,
+    UserCog, Users, ClipboardList, CheckCircle, XCircle,
 } from "lucide-react";
 
 // Eski tarz büyük StatCard
@@ -317,6 +317,90 @@ const AdminDashboard = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Antrenman Devamlılığı */}
+            {(stats.attendance_no_shows?.length > 0 || stats.attendance_champions?.length > 0 || stats.attendance_week_summary?.present_total > 0 || stats.attendance_week_summary?.absent_total > 0) && (
+                <div className="bg-liv-card border border-liv-border p-6 rounded-md" data-testid="dashboard-attendance">
+                    <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                        <h3 className="font-display text-2xl uppercase inline-flex items-center gap-2"><ClipboardList className="w-6 h-6 text-liv-yellow" /> Antrenman Devamlılığı</h3>
+                        <Link to="/admin/attendance" className="text-xs uppercase tracking-widest text-liv-yellow hover:underline">Yoklamaya git →</Link>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Bu hafta özet */}
+                        <div className="bg-liv-surface border border-liv-border p-4 rounded-sm" data-testid="attendance-week-summary">
+                            <div className="text-xs uppercase tracking-widest text-neutral-400 mb-3">Bu Hafta (Son 7 Gün)</div>
+                            <div className="flex items-baseline gap-3">
+                                <span className="font-display text-4xl text-liv-yellow">{stats.attendance_week_summary?.attendance_pct ?? "—"}{stats.attendance_week_summary?.attendance_pct != null && <span className="text-2xl">%</span>}</span>
+                                <span className="text-xs text-neutral-400">devamlılık</span>
+                            </div>
+                            <div className="mt-3 flex gap-4 text-sm">
+                                <span className="text-emerald-400 inline-flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Geldi: <strong>{stats.attendance_week_summary?.present_total || 0}</strong></span>
+                                <span className="text-red-400 inline-flex items-center gap-1"><XCircle className="w-3.5 h-3.5" /> Gelmedi: <strong>{stats.attendance_week_summary?.absent_total || 0}</strong></span>
+                            </div>
+                            {stats.attendance_week_summary?.days?.length > 0 && (
+                                <div className="mt-3 flex items-end gap-1 h-10" title="Günlük geldi (sarı) / gelmedi (gri)">
+                                    {stats.attendance_week_summary.days.map((d) => {
+                                        const total = (d.present || 0) + (d.absent || 0);
+                                        const pct = total > 0 ? (d.present / total) * 100 : 0;
+                                        return (
+                                            <div key={d.date} className="flex-1 flex flex-col-reverse" title={`${d.date}: ${d.present} geldi, ${d.absent} gelmedi`}>
+                                                <div className="bg-liv-yellow" style={{ height: `${pct}%` }} />
+                                                <div className="bg-neutral-700" style={{ height: `${100 - pct}%` }} />
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Devamlılık Şampiyonları */}
+                        <div className="bg-liv-surface border border-liv-border p-4 rounded-sm" data-testid="attendance-champions">
+                            <div className="text-xs uppercase tracking-widest text-emerald-400 mb-3 inline-flex items-center gap-1.5"><Trophy className="w-3.5 h-3.5" /> Devamlılık Şampiyonları (30 gün)</div>
+                            {(stats.attendance_champions || []).length === 0 ? (
+                                <div className="text-xs text-neutral-500">Henüz yeterli veri yok (en az 4 antrenman gerekir).</div>
+                            ) : (
+                                <div className="space-y-1.5">
+                                    {stats.attendance_champions.map((p, i) => (
+                                        <div key={p.player_id} className="flex items-center gap-2">
+                                            <div className="text-xs text-neutral-500 w-4">{i + 1}.</div>
+                                            <div className="w-7 h-7 bg-liv-black border border-liv-border rounded-full overflow-hidden flex-shrink-0">
+                                                {p.photo_url ? <img src={p.photo_url} alt={p.name} className="w-full h-full object-cover" /> : <Users className="w-3 h-3 text-neutral-600 m-auto mt-1.5" />}
+                                            </div>
+                                            <div className="flex-1 min-w-0 text-sm truncate">{p.name}</div>
+                                            <div className="text-xs text-emerald-400 font-bold flex-shrink-0">{p.total} ✓</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* En Çok Gelmeyenler */}
+                        <div className="bg-liv-surface border border-liv-border p-4 rounded-sm" data-testid="attendance-no-shows">
+                            <div className="text-xs uppercase tracking-widest text-red-400 mb-3 inline-flex items-center gap-1.5"><XCircle className="w-3.5 h-3.5" /> En Çok Gelmeyen (30 gün)</div>
+                            {(stats.attendance_no_shows || []).length === 0 ? (
+                                <div className="text-xs text-neutral-500">Hiçbir oyuncu gelmemezlik etmemiş 👏</div>
+                            ) : (
+                                <div className="space-y-1.5">
+                                    {stats.attendance_no_shows.map((p, i) => (
+                                        <div key={p.player_id} className="flex items-center gap-2">
+                                            <div className="text-xs text-neutral-500 w-4">{i + 1}.</div>
+                                            <div className="w-7 h-7 bg-liv-black border border-liv-border rounded-full overflow-hidden flex-shrink-0">
+                                                {p.photo_url ? <img src={p.photo_url} alt={p.name} className="w-full h-full object-cover" /> : <Users className="w-3 h-3 text-neutral-600 m-auto mt-1.5" />}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-sm truncate">{p.name}</div>
+                                                <div className="text-[10px] text-neutral-500">{p.pct}% devamlılık · {p.total} antrenman</div>
+                                            </div>
+                                            <div className="text-xs text-red-400 font-bold flex-shrink-0">{p.absent} ✗</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

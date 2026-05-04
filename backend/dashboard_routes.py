@@ -159,6 +159,58 @@ def register_dashboard_routes(
         seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
         media_last_7_days = await db.media.count_documents({'created_at': {'$gte': seven_days_ago}})
 
+        # ─── Attendance widgets (last 30 days) ───
+        thirty_days_ago_iso = (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
+        att_rows = await db.attendance_records.find(
+            {'training_date': {'$gte': thirty_days_ago_iso}},
+            {'_id': 0, 'player_id': 1, 'player_name': 1, 'player_jersey': 1, 'player_photo': 1, 'status': 1, 'training_date': 1}
+        ).to_list(5000)
+        # Aggregate per player
+        per_player: Dict[str, Dict[str, Any]] = {}
+        for r in att_rows:
+            pid = r.get('player_id')
+            if not pid:
+                continue
+            slot = per_player.setdefault(pid, {
+                'player_id': pid,
+                'name': r.get('player_name'),
+                'jersey_number': r.get('player_jersey'),
+                'photo_url': r.get('player_photo'),
+                'present': 0, 'absent': 0,
+            })
+            if r.get('status') == 'present':
+                slot['present'] += 1
+            else:
+                slot['absent'] += 1
+        for slot in per_player.values():
+            total = slot['present'] + slot['absent']
+            slot['total'] = total
+            slot['pct'] = round((slot['present'] / total) * 100) if total > 0 else 0
+        all_players_stats = list(per_player.values())
+        # No-shows: players with most absences (must have at least 1 absence)
+        no_shows = [p for p in all_players_stats if p['absent'] > 0]
+        no_shows.sort(key=lambda x: (-x['absent'], -x['total']))
+        # Champions: 100% attendance with at least 4 trainings in last 30 days
+        champions = [p for p in all_players_stats if p['pct'] == 100 and p['total'] >= 4]
+        champions.sort(key=lambda x: -x['total'])
+        # Week summary: last 7 days, daily breakdown
+        week_ago_iso = (datetime.now(timezone.utc) - timedelta(days=7)).date().isoformat()
+        week_rows = await db.attendance_records.find(
+            {'training_date': {'$gte': week_ago_iso}},
+            {'_id': 0, 'training_date': 1, 'status': 1}
+        ).to_list(2000)
+        week_by_date: Dict[str, Dict[str, int]] = {}
+        for r in week_rows:
+            d = r.get('training_date') or ''
+            slot = week_by_date.setdefault(d, {'present': 0, 'absent': 0})
+            slot[r.get('status', 'absent')] = slot.get(r.get('status', 'absent'), 0) + 1
+        week_summary_days = sorted(
+            [{'date': d, 'present': v['present'], 'absent': v['absent']} for d, v in week_by_date.items()],
+            key=lambda x: x['date']
+        )
+        week_present_total = sum(d['present'] for d in week_summary_days)
+        week_absent_total = sum(d['absent'] for d in week_summary_days)
+
         recent_finished = await db.matches.find(
             {'status': 'finished'}, {'_id': 0}
         ).sort('match_date', -1).limit(10).to_list(10)
@@ -227,6 +279,14 @@ def register_dashboard_routes(
             'opponents_total': opponents_total,
             'missing_opponent_logos': missing_opponent_logos,
             'media_last_7_days': media_last_7_days,
+            'attendance_no_shows': no_shows[:5],
+            'attendance_champions': champions[:5],
+            'attendance_week_summary': {
+                'days': week_summary_days,
+                'present_total': week_present_total,
+                'absent_total': week_absent_total,
+                'attendance_pct': round((week_present_total / (week_present_total + week_absent_total)) * 100) if (week_present_total + week_absent_total) > 0 else None,
+            },
             'season_form': season_form,
             'season_form_summary': season_summary,
             'top_performers': top_performers,

@@ -107,7 +107,7 @@ const ImageField = ({ value, onChange, testid, purpose = "upload" }) => {
  */
 const CrudPage = ({
     title, collection, fields, columns, defaultValues = {},
-    renderRow, customActions, onAfterSave, onBeforeSave,
+    renderRow, customActions, onAfterSave, onBeforeSave, extraModalContent,
 }) => {
     const [list, setList] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -245,6 +245,11 @@ const CrudPage = ({
                                     )}
                                 </div>
                             ))}
+                            {extraModalContent && !editing.__new && (
+                                <div className="md:col-span-2 mt-2">
+                                    {typeof extraModalContent === "function" ? extraModalContent(editing) : extraModalContent}
+                                </div>
+                            )}
                         </div>
                         <div className="p-4 md:p-5 border-t border-liv-border flex justify-end gap-3 flex-shrink-0 bg-liv-card">
                             <button onClick={() => setEditing(null)} className="btn-ghost-light !py-2 !px-4 !text-xs">İptal</button>

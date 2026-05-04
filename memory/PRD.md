@@ -1,3 +1,62 @@
+## 5o. 2026-05-04 — v1.11.0 Antrenman Yönetimi & Yoklama Sistemi
+
+### Kullanıcı talebi
+"A takımı + altyapı için antrenman yoklaması. Geldi/Gelmedi (sade), Gelmedi seçilince sebep zorunlu input açılsın. Dashboard widget'ları: en çok gelmeyenler, devamlılık şampiyonları, hafta özeti. Oyuncu detay sayfasında son 10 antrenman + yüzde."
+
+### Backend
+**Yeni collection'lar (COLLECTIONS dict'e eklendi):**
+- `team_trainings`: `{id, group_label, date, time_range, field, coach_name, notes, attendance_taken}` — A Takım/U13-U19 için
+- `attendance_records`: `{id, training_id, training_date, training_group, training_time, player_id, player_name, player_jersey, player_position, player_photo, status, reason, recorded_by, recorded_at}` — denormalized for fast queries
+
+**Yeni endpoint'ler (server.py):**
+- `GET  /api/admin/team_trainings` (CRUD via factory) - Liste/oluştur/güncelle/sil
+- `GET  /api/admin/trainings/{id}/attendance` — Mevcut yoklama kayıtlarını getir
+- `POST /api/admin/trainings/{id}/attendance` — Bulk upsert (delete+insert atomic). 400 döner eğer absent entry'de reason boşsa (`Gelmeyen oyuncu için sebep zorunludur`).
+- `GET  /api/admin/players/{id}/attendance-history?limit=10` — Son N + summary stats (`{recent, total_count, present_count, absent_count, attendance_pct}`)
+
+**Dashboard stats genişletme (dashboard_routes.py):**
+- `attendance_no_shows`: Top 5 (son 30 gün, 1+ devamsızlık)
+- `attendance_champions`: Top 5 (%100 devamlılık, en az 4 antrenman)
+- `attendance_week_summary`: Son 7 gün günlük breakdown (`{days: [{date, present, absent}], present_total, absent_total, attendance_pct}`)
+
+### Frontend
+**Yeni sayfalar:**
+- `/admin/trainings` (`Trainings.jsx`) — CrudPage with group_label select (A Takım, U19/U17/U15/U14/U13), date, time_range, field, coach_name, notes
+- `/admin/attendance` (`Attendance.jsx`) — Yoklama akışı:
+  - Antrenman seç dropdown (en yeni en üstte, ✓ yoklama alındıysa)
+  - Default: tüm oyuncular GELDİ (yeşil rozet)
+  - Group bazlı oyuncu filtresi (`filterPlayersForGroup`): A Takım hepsini, U17 yaş ≤ 17, vs.
+  - "Gelmedi" tıklayınca sebep input'u açılır + zorunlu (border-red-500/60)
+  - Validation: kaydetmeden önce her absent için reason kontrolü
+  - Sayaç: Geldi/Gelmedi (real-time)
+
+**AdminLayout güncellendi:**
+- Yeni "Antrenman Yönetimi" group: Antrenman Takvimi + Yoklama
+- Akademi'deki "Antrenman Takvimi" → "Akademi Takvimi" olarak yeniden isimlendirildi (karışıklık önlemi)
+
+**Dashboard genişletildi (`Dashboard.jsx`):**
+- 3 yeni widget kartı (sadece veri varsa render edilir):
+  - Bu Hafta: %X devamlılık + günlük geldi/gelmedi günlük çubuk grafik
+  - Devamlılık Şampiyonları: top 5 (foto + isim + antrenman sayısı)
+  - En Çok Gelmeyen: top 5 (foto + isim + %devamlılık + total antrenman + ✗ count)
+- "Yoklamaya git →" CTA linki
+
+**Players modal genişletildi (`Players.jsx` + `CrudPage.jsx`):**
+- CrudPage'e yeni `extraModalContent` prop eklendi (function veya JSX)
+- `AttendanceHistory` component: Oyuncu modal'ında son 10 antrenman ✅/❌ rozetleriyle, hover tooltip ("tarih · grup · sebep"), %devamlılık + özet sayaçlar, devamsızlık sebepleri özeti
+
+### Test (E2E curl)
+- 2 oyuncu yoklama: P1 present → history total:1 present:1 pct:100% ✓
+- P2 absent reason="İş" → history total:1 absent:1 reason:"İş" ✓
+- Dashboard stats: no_shows=[(Batuhan Gül, 1)], week_summary={present:1, absent:1, pct:50} ✓
+- 400 response if absent missing reason ✓
+- 74/74 pytest passing
+- UI screenshot: Yoklama sayfası 34 oyuncuyla, Dashboard widget'ları render oluyor
+
+### Version
+v1.10.0 → **v1.11.0**
+
+
 ## 5n. 2026-05-03 — v1.10.0 DR AI FUTBOL Brand Logo · 3. Marka İmzası Seçeneği
 
 ### Kullanıcı talebi

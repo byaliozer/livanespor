@@ -285,6 +285,8 @@ COLLECTIONS = {
     'hero_slides': {'public': True, 'slug_field': None},
     'team_photos': {'public': False, 'slug_field': None},
     'opponent_clubs': {'public': False, 'slug_field': 'name'},
+    'team_trainings': {'public': False, 'slug_field': None},
+    'attendance_records': {'public': False, 'slug_field': None},
 }
 
 async def _list(coll: str, public_only: bool = False, filters: Optional[dict] = None, sort_field: str = 'created_at', sort_dir: int = -1, limit: int = 500):
@@ -455,6 +457,85 @@ def admin_routes(coll_name: str):
 
 for c in COLLECTIONS.keys():
     admin_routes(c)
+
+# ─────────────────────────── Attendance (Yoklama) ───────────────────────────
+class AttendanceEntry(BaseModel):
+    player_id: str
+    status: Literal["present", "absent"]
+    reason: Optional[str] = None
+
+
+class AttendanceSaveIn(BaseModel):
+    entries: List[AttendanceEntry]
+
+
+@api_router.get("/admin/trainings/{training_id}/attendance")
+async def admin_get_attendance(training_id: str, user=Depends(require_admin)):
+    """Return existing attendance records for a training (player_id → status, reason)."""
+    rows = await db.attendance_records.find({'training_id': training_id}, {'_id': 0}).to_list(500)
+    return rows
+
+
+@api_router.post("/admin/trainings/{training_id}/attendance")
+async def admin_save_attendance(training_id: str, payload: AttendanceSaveIn, user=Depends(require_admin)):
+    """Bulk-upsert attendance records for a training. Validates that absent entries have a reason."""
+    training = await db.team_trainings.find_one({'id': training_id}, {'_id': 0})
+    if not training:
+        raise HTTPException(404, "Antrenman bulunamadı")
+    # Validate reasons
+    for e in payload.entries:
+        if e.status == "absent" and not (e.reason or "").strip():
+            raise HTTPException(400, f"Gelmeyen oyuncu için sebep zorunludur (player_id={e.player_id})")
+    # Players lookup for denormalization
+    pids = [e.player_id for e in payload.entries]
+    players = await db.players.find({'id': {'$in': pids}}, {'_id': 0, 'id': 1, 'name': 1, 'jersey_number': 1, 'position': 1, 'photo_url': 1}).to_list(500)
+    p_map = {p['id']: p for p in players}
+    # Delete existing records for this training, then insert fresh
+    await db.attendance_records.delete_many({'training_id': training_id})
+    docs = []
+    now = now_iso()
+    for e in payload.entries:
+        p = p_map.get(e.player_id) or {}
+        docs.append({
+            'id': new_id(),
+            'training_id': training_id,
+            'training_group': training.get('group_label'),
+            'training_date': training.get('date'),
+            'training_time': training.get('time_range'),
+            'player_id': e.player_id,
+            'player_name': p.get('name'),
+            'player_jersey': p.get('jersey_number'),
+            'player_position': p.get('position'),
+            'player_photo': p.get('photo_url'),
+            'status': e.status,
+            'reason': (e.reason or "").strip() if e.status == "absent" else None,
+            'recorded_by': user.get('id'),
+            'recorded_at': now,
+        })
+    if docs:
+        await db.attendance_records.insert_many(docs)
+    # Mark training as "yoklama_alındı"
+    await db.team_trainings.update_one({'id': training_id}, {'$set': {'attendance_taken': True, 'attendance_at': now, 'updated_at': now}})
+    return {'ok': True, 'saved': len(docs)}
+
+
+@api_router.get("/admin/players/{player_id}/attendance-history")
+async def admin_player_attendance_history(player_id: str, limit: int = 10, user=Depends(require_admin)):
+    """Return last N attendance records for a player + summary stats."""
+    rows = await db.attendance_records.find({'player_id': player_id}, {'_id': 0}).sort('training_date', -1).limit(max(1, min(limit, 100))).to_list(100)
+    all_rows = await db.attendance_records.find({'player_id': player_id}, {'_id': 0, 'status': 1}).to_list(2000)
+    total = len(all_rows)
+    present = sum(1 for r in all_rows if r.get('status') == 'present')
+    absent = total - present
+    pct = round((present / total) * 100) if total > 0 else None
+    return {
+        'recent': rows,
+        'total_count': total,
+        'present_count': present,
+        'absent_count': absent,
+        'attendance_pct': pct,
+    }
+
 
 # ─────────────────────────── Site Settings ───────────────────────────
 @api_router.get("/admin/site-settings")
