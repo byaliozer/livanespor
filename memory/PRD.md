@@ -1,3 +1,23 @@
+## 5p. 2026-05-04 — v1.12.0 Kulüp Yönetim Modülleri Fix & Polish (Finance / Sözleşme / AI Maç Analizi)
+
+### Blocker Fix'ler
+- **LlmChat Import Eksikti** → `server.py:24`'e `from emergentintegrations.llm.chat import LlmChat, UserMessage` eklendi. Match-analysis endpoint'i `NameError` fırlatıyordu (500 Internal Server Error).
+- **Yanlış Koleksiyon Adı** → `db.subscription` (tekil) → `db.subscriptions` (çoğul). Krediler düşürülmüyordu. Mevcut `consume_credit(1, note=...)` helper ile değiştirildi. Kredi düşümü, ledger (`transactions` array), ve concurrency-safe update artık doğru çalışıyor.
+
+### Ürün-kritik iyileştirmeler
+- **LLM hatası durumunda otomatik kredi iadesi**: `match-analysis/generate` endpoint'inde `try/except` ile AI çağrısı sarıldı. Fail olursa 1 kredi anında iade edilir + `transactions` array'ine `refund` girişi push'lanır + 502 döner. Kullanıcı bozuk yanıt için krediye yakılmaz.
+- **`over_contract_delta` alanı** (`/api/admin/players/{id}/financial-summary`): Kullanıcı senaryosu ("600K anlaşıldı, primlerle 750K ödendi") için `total_paid > contracted` durumunda aradaki fark bu alanda expose edilir (önceden `remaining = max(0, ...)` ile saklanıyordu). UI'da oyuncu kartında yeşil "Ek ödenen (prim/bonus): +₺150.000" olarak gösterilir.
+
+### Test durumu
+- Backend: **91/91 pytest geçti** (17 yeni `test_phase3_club_mgmt.py` + 74 regression). Gerçek gpt-5.2 çağrısı ile ~15s'de 5-bölüm Türkçe rapor üretildi.
+- Frontend: `/admin/finance`, `/admin/contracts`, `/admin/match-analysis` + Dashboard'daki 3 yeni widget (Bu Ay Kasa / 90 Gün İçinde Biten Sözleşmeler / Rakip Maç Analizi · DR AI FUTBOL) hepsi data-testid'leriyle sağlıklı render ediliyor.
+
+### Auto-reset mekanizması (kullanıcının istediği güvenilirlik kuralı) — doğrulandı ✓
+- Maç `status=finished` olunca GET `/api/admin/match-analysis/{id}` rapor otomatik siler.
+- `/admin/match-analysis/upcoming/next` de her çağrıda finished maçları tarayıp raporları toplar.
+- Böylece rakip değişince buton yeniden görünür; cache'lenmiş rapor üstüne yeni rapor yazılmaz (idempotent).
+
+
 ## 5o. 2026-05-04 — v1.11.0 Antrenman Yönetimi & Yoklama Sistemi
 
 ### Kullanıcı talebi

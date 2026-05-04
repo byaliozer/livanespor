@@ -133,6 +133,7 @@ const Contracts = () => {
                                     <div className="font-display text-2xl text-liv-yellow">{fmtTL(summary.contracted_amount)}</div>
                                     <div className="text-xs text-neutral-400 mt-1">Ödenen: <span className="text-emerald-400">{fmtTL(summary.total_paid)}</span></div>
                                     {summary.remaining > 0 && <div className="text-xs text-amber-400">Kalan: {fmtTL(summary.remaining)}</div>}
+                                    {summary.over_contract_delta > 0 && <div className="text-xs text-emerald-300" data-testid="over-contract-delta">Ek ödenen (prim/bonus): +{fmtTL(summary.over_contract_delta)}</div>}
                                 </div>
                             </div>
 

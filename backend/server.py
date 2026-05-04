@@ -562,6 +562,7 @@ async def admin_player_financial(player_id: str, user=Depends(require_admin)):
         'total_paid': total_paid,
         'contracted_amount': contracted,
         'remaining': max(0, contracted - total_paid) if contracted else None,
+        'over_contract_delta': max(0, total_paid - contracted) if contracted else 0,
         'by_type': by_type,
     }
 
@@ -745,9 +746,22 @@ KURALLAR:
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
         raise HTTPException(500, "LLM key tanımlı değil")
-    chat = LlmChat(api_key=api_key, session_id=f"match-analysis-{new_id()[:8]}", system_message=system_prompt).with_model("openai", "gpt-5.2")
-    raw = await chat.send_message(UserMessage(text=facts_block))
-    content = str(raw).strip()
+    try:
+        chat = LlmChat(api_key=api_key, session_id=f"match-analysis-{new_id()[:8]}", system_message=system_prompt).with_model("openai", "gpt-5.2")
+        raw = await chat.send_message(UserMessage(text=facts_block))
+        content = str(raw).strip()
+        if not content:
+            raise ValueError("Boş yanıt")
+    except Exception as e:
+        # Refund credit on LLM failure so the user isn't charged for a broken response
+        await db.subscriptions.update_one(
+            {'id': 'main'},
+            {'$inc': {'credit_balance': 1}, '$set': {'updated_at': now_iso()}, '$push': {'transactions': {
+                'type': 'refund', 'amount': 1, 'at': now_iso(), 'note': f'match-analysis refund ({opponent_name}): {type(e).__name__}',
+            }}},
+        )
+        logger.exception("match-analysis LLM failed; credit refunded")
+        raise HTTPException(502, f"AI analiz üretilemedi (1 kredi iade edildi): {e}")
 
     report = {
         'id': new_id(),
