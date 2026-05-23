@@ -896,6 +896,225 @@ async def admin_next_match_analysis(user=Depends(require_admin)):
     return {'match': next_m, 'report': rep}
 
 
+# ─────────────────────────── Marketing Asset Generation ───────────────────────────
+class MarketingGenerateIn(BaseModel):
+    concept_id: str
+    sizes: Optional[List[str]] = None  # default = all 3 ("feed", "story", "landscape")
+
+
+# Strong references for background marketing tasks (prevent GC mid-run)
+_MARKETING_TASKS: set = set()
+
+
+@api_router.get("/admin/marketing/concepts")
+async def admin_marketing_concepts(user=Depends(require_admin)):
+    """Returns the static catalog of 10 marketing concepts (no DB hit)."""
+    return [
+        {"id": c["id"], "title": c["title"], "hook": c["hook"], "category": c["category"]}
+        for c in mkt.CONCEPTS
+    ]
+
+
+@api_router.get("/admin/marketing")
+async def admin_marketing_list(user=Depends(require_admin)):
+    """List all generated marketing assets."""
+    rows = await db.marketing_assets.find({}, {'_id': 0}).sort('generated_at', -1).to_list(200)
+    return rows
+
+
+@api_router.delete("/admin/marketing/{asset_id}")
+async def admin_marketing_delete(asset_id: str, user=Depends(require_admin)):
+    r = await db.marketing_assets.delete_one({'id': asset_id})
+    return {'ok': True, 'deleted': r.deleted_count}
+
+
+async def _gen_one_image(api_key: str, prompt: str, size_px: str) -> Dict[str, Any]:
+    """Generate one image via gpt-image-1 (proven stable), upload to storage, register in media."""
+    oclient = AsyncOpenAI(api_key=api_key, timeout=90.0)
+    resp = await oclient.images.generate(model="gpt-image-1", prompt=prompt, size=size_px, quality="high", n=1)
+    model_used = "gpt-image-1"
+    b64 = resp.data[0].b64_json
+    if not b64:
+        raise RuntimeError("Görsel üretilemedi")
+    png_bytes = base64.b64decode(b64)
+    sp = object_storage.new_path("marketing", "png")
+    res = await object_storage.put_bytes(sp, png_bytes, "image/png")
+    storage_path = res.get("path", sp)
+    # Register in db.media so /api/public/media/{path} can serve it
+    await db.media.insert_one({
+        'id': new_id(),
+        'storage_path': storage_path,
+        'mime_type': 'image/png',
+        'size_bytes': len(png_bytes),
+        'purpose': 'marketing',
+        'is_deleted': False,
+        'created_at': now_iso(),
+    })
+    return {
+        "size_px": size_px,
+        "public_url": f"/api/public/media/{storage_path}",
+        "storage_path": storage_path,
+        "model_used": model_used,
+        "prompt_used": prompt,
+    }
+
+
+async def _marketing_run_job(asset_id: str, concept: Dict[str, Any], sizes: List[str], api_key: str):
+    """Background worker: generate images sequentially, update asset doc, generate caption.
+    On full failure refunds credits and marks asset status='failed'."""
+    logging.info(f"[marketing-job] START asset={asset_id} concept={concept['id']} sizes={sizes}")
+    images_map: Dict[str, Any] = {}
+    try:
+        for sz in sizes:
+            try:
+                logging.info(f"[marketing-job] generating {sz} ({mkt.SIZE_PIXELS[sz]})…")
+                img = await _gen_one_image(api_key, concept["prompts"][sz], mkt.SIZE_PIXELS[sz])
+                logging.info(f"[marketing-job] {sz} DONE → {img.get('public_url')}")
+                images_map[sz] = img
+                # Incremental progress save so polling UI sees images as they finish
+                await db.marketing_assets.update_one(
+                    {'id': asset_id},
+                    {'$set': {f'images.{sz}': img, 'updated_at': now_iso()}},
+                )
+            except Exception as e:
+                logger.warning(f"marketing image fail size={sz}: {e}")
+                # Continue with other sizes; partial success acceptable
+        if not images_map:
+            raise RuntimeError("Hiçbir boyut üretilemedi")
+
+        # Caption (best-effort)
+        try:
+            chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"],
+                           session_id=f"marketing-{asset_id[:8]}",
+                           system_message=mkt.CAPTION_SYSTEM_PROMPT).with_model("openai", "gpt-5.2")
+            raw = await chat.send_message(UserMessage(text=mkt.caption_user_prompt(concept)))
+            caption_text = str(raw).strip()
+        except Exception as e:
+            logger.warning(f"marketing caption fail: {e}")
+            caption_text = (
+                f"{concept['hook']}\n\n"
+                f"DR AI FUTBOL · Kulüp yönetiminin yeni çağı.\n\n"
+                f"Detaylı bilgi ve canlı demo: www.draifutbol.com\n\n"
+                f"#draifutbol #yapayzeka #futbol #amatorfutbol #kulupyonetimi"
+            )
+
+        await db.marketing_assets.update_one(
+            {'id': asset_id},
+            {'$set': {
+                'status': 'completed',
+                'caption': caption_text,
+                'sizes_completed': list(images_map.keys()),
+                'completed_at': now_iso(),
+                'updated_at': now_iso(),
+            }},
+        )
+    except Exception as e:
+        # Full failure — refund credits and mark failed
+        try:
+            asset = await db.marketing_assets.find_one({'id': asset_id}, {'_id': 0, 'credits_used': 1})
+            refund = int((asset or {}).get('credits_used', 0))
+            if refund > 0:
+                await db.subscriptions.update_one(
+                    {'id': 'main'},
+                    {'$inc': {'credit_balance': refund}, '$set': {'updated_at': now_iso()},
+                     '$push': {'transactions': {'type': 'refund', 'amount': refund, 'at': now_iso(),
+                                                'note': f'marketing refund ({concept["id"]}): {type(e).__name__}'}}},
+                )
+        except Exception:
+            pass
+        await db.marketing_assets.update_one(
+            {'id': asset_id},
+            {'$set': {'status': 'failed', 'error': str(e)[:300], 'updated_at': now_iso()}},
+        )
+        logger.exception(f"marketing job failed for {asset_id}")
+
+
+@api_router.post("/admin/marketing/generate")
+async def admin_marketing_generate(payload: MarketingGenerateIn, user=Depends(require_admin)):
+    """Start marketing asset generation (background job).
+    Returns immediately with asset_id and status='pending'. Frontend polls
+    GET /admin/marketing/{asset_id} to see progress as images complete one by one.
+    Charges 1 credit per requested size upfront; refunded on full failure.
+    """
+    concept = mkt.CONCEPTS_BY_ID.get(payload.concept_id)
+    if not concept:
+        raise HTTPException(404, "Konsept bulunamadı")
+    sizes = payload.sizes or list(mkt.ALL_SIZES)
+    sizes = [s for s in sizes if s in mkt.ALL_SIZES]
+    if not sizes:
+        raise HTTPException(400, "Geçerli boyut yok")
+
+    s = await db.ai_settings.find_one({'id': 'main'}, {'_id': 0}) or {}
+    api_key = s.get('openai_api_key') or OPENAI_API_KEY
+    if not api_key:
+        raise HTTPException(400, "AI API anahtarı yapılandırılmamış")
+    if s.get('enabled') is False:
+        raise HTTPException(400, "AI üretimi devre dışı")
+
+    needed = len(sizes)
+    if not await consume_credit(needed, note=f"marketing: {concept['id']} x{needed}"):
+        raise HTTPException(402, f"Kredi yetersiz: {needed} kredi gerekiyor.")
+
+    asset = {
+        'id': new_id(),
+        'concept_id': concept['id'],
+        'concept_title': concept['title'],
+        'concept_hook': concept['hook'],
+        'category': concept['category'],
+        'status': 'pending',
+        'caption': '',
+        'cta_url': 'www.draifutbol.com',
+        'images': {},
+        'sizes_requested': sizes,
+        'sizes_completed': [],
+        'credits_used': needed,
+        'generated_at': now_iso(),
+        'generated_by': user.get('id'),
+    }
+    await db.marketing_assets.insert_one(asset)
+    asset.pop('_id', None)
+
+    # Fire background task — keep strong reference to prevent GC
+    task = asyncio.create_task(_marketing_run_job(asset['id'], concept, sizes, api_key))
+    _MARKETING_TASKS.add(task)
+    task.add_done_callback(_MARKETING_TASKS.discard)
+    return asset
+
+
+@api_router.get("/admin/marketing/{asset_id}")
+async def admin_marketing_get(asset_id: str, user=Depends(require_admin)):
+    """Get one asset (for status polling)."""
+    a = await db.marketing_assets.find_one({'id': asset_id}, {'_id': 0})
+    if not a:
+        raise HTTPException(404, "Asset bulunamadı")
+    return a
+
+
+@api_router.post("/admin/marketing/{asset_id}/regenerate-caption")
+async def admin_marketing_regen_caption(asset_id: str, user=Depends(require_admin)):
+    """Re-roll the caption only (free, no credit cost)."""
+    asset = await db.marketing_assets.find_one({'id': asset_id}, {'_id': 0})
+    if not asset:
+        raise HTTPException(404, "Asset bulunamadı")
+    concept = mkt.CONCEPTS_BY_ID.get(asset['concept_id'])
+    if not concept:
+        raise HTTPException(404, "Konsept bulunamadı")
+    try:
+        chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"],
+                       session_id=f"marketing-cap-{new_id()[:8]}",
+                       system_message=mkt.CAPTION_SYSTEM_PROMPT).with_model("openai", "gpt-5.2")
+        raw = await chat.send_message(UserMessage(text=mkt.caption_user_prompt(concept)))
+        caption_text = str(raw).strip()
+    except Exception as e:
+        raise HTTPException(502, f"Caption üretilemedi: {e}")
+    await db.marketing_assets.update_one(
+        {'id': asset_id},
+        {'$set': {'caption': caption_text, 'updated_at': now_iso()}},
+    )
+    return {'ok': True, 'caption': caption_text}
+
+
+
 # ─────────────────────────── Site Settings ───────────────────────────
 @api_router.get("/admin/site-settings")
 async def admin_get_settings(user=Depends(require_admin)):
@@ -982,6 +1201,7 @@ import mackolik_scheduler
 import storage as object_storage
 import ai_media
 import caption_ai
+import marketing as mkt
 
 class MackolikSettingsIn(BaseModel):
     macko_team_id: str

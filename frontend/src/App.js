@@ -55,6 +55,7 @@ import AdminAttendance from "@/pages/admin/Attendance";
 import AdminFinance from "@/pages/admin/Finance";
 import AdminContracts from "@/pages/admin/Contracts";
 import AdminMatchAnalysis from "@/pages/admin/MatchAnalysis";
+import AdminMarketing from "@/pages/admin/Marketing";
 
 function App() {
     return (
@@ -112,6 +113,7 @@ function App() {
                     <Route path="/admin/finance" element={<AdminLayout><AdminFinance /></AdminLayout>} />
                     <Route path="/admin/contracts" element={<AdminLayout><AdminContracts /></AdminLayout>} />
                     <Route path="/admin/match-analysis" element={<AdminLayout><AdminMatchAnalysis /></AdminLayout>} />
+                    <Route path="/admin/marketing" element={<AdminLayout><AdminMarketing /></AdminLayout>} />
                 </Routes>
             </BrowserRouter>
         </AuthProvider>

@@ -5,7 +5,7 @@ import { APP_VERSION, BUILD_DATE } from "@/version";
 import {
     LayoutDashboard, Users, UserCog, Calendar, Trophy, Sparkles, Image,
     Newspaper, GraduationCap, ClipboardList, Settings, LogOut, Layers,
-    Mail, Wand2, ShieldQuestion, KeyRound, RefreshCw, Package, DollarSign, FileText, Brain
+    Mail, Wand2, ShieldQuestion, KeyRound, RefreshCw, Package, DollarSign, FileText, Brain, Megaphone
 } from "lucide-react";
 
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_401d88f4-8dae-48a8-9716-45cb5be0ec5c/artifacts/4x1k75zi_Livanespor_SARI_SIYAH_NEW%20genelde%20bu.png";
