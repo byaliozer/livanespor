@@ -35,6 +35,7 @@ const NAV = [
     { to: "/admin/team-photos", label: "Takım Fotoğrafları", icon: Image, group: "İçerik" },
     { to: "/admin/ai", label: "AI Görsel", icon: Wand2, group: "İçerik" },
     { to: "/admin/ai-studio", label: "AI Stüdyo", icon: Wand2, group: "İçerik" },
+    { to: "/admin/marketing", label: "Pazarlama Görselleri", icon: Megaphone, group: "Pazarlama", superOnly: true },
     { to: "/admin/paketim", label: "Paketim", icon: Package, group: "Sistem", superOnly: true },
     { to: "/admin/users", label: "Kullanıcılar", icon: ShieldQuestion, group: "Sistem", superOnly: true },
     { to: "/admin/account", label: "Hesap Ayarları", icon: KeyRound, group: "Sistem" },
